@@ -101,9 +101,14 @@ nlmixr <- function(object, data, est="nlme", control=list(), calc.resid=TRUE, ..
 ##' @export
 nlmixr.function <- function(object, data, est="nlme", control=list(), calc.resid=TRUE, ...){
     uif <- nlmixrUI(object);
+    class(uif) <- "list";
+    uif$nmodel$model.name <- deparse(substitute(object))
     if (missing(data) && missing(est)){
+        class(uif) <- "nlmixrUI"
         return(uif)
     } else {
+        uif$nmodel$data.name <- deparse(substitute(data))
+        class(uif) <- "nlmixrUI"
         nlmixr_fit(uif, data, est, control=control, calc.resid=calc.resid, ...);
     }
 }
@@ -115,6 +120,9 @@ nlmixr.nlmixrUI <- function(object, data, est="nlme", control=list(), ...){
     if (missing(data) && missing(est)){
         return(uif)
     } else {
+        class(uif) <- "list";
+        uif$nmodel$data.name <- deparse(substitute(data))
+        class(uif) <- "nlmixrUI"
         nlmixr_fit(uif, data, est, control=control, ...);
     }
 }
@@ -161,9 +169,52 @@ nlmixr.nlmixr.ui.saem <- nlmixr.nlmixr.ui.nlme
 ##' @export
 nlmixr_fit <- function(uif, data, est="nlme", control=list(), ...,
                        sum.prod=FALSE, calc.resid=TRUE){
+    start.time <- Sys.time();
     dat <- data;
+    if (is(dat$ID, "factor")){
+        dat$ID <- paste(dat$ID);
+    }
+    if (is(dat$ID, "character")){
+        lvl <- unique(dat$ID);
+        lab <- paste(lvl)
+        dat$ID <- factor(dat$ID, levels=lvl, labels=lab);
+        backSort <- levels(dat$ID);
+        backSort2 <- seq_along(backSort)
+        dat$ID <- as.integer(dat$ID);
+    } else {
+        idSort <- .Call(`_nlmixr_chkSortIDTime`, as.integer(dat$ID), as.double(dat$TIME));
+        backSort <- c()
+        if (idSort == 2L){
+            lvl <- unique(dat$ID);
+            lab <- paste(lvl)
+            dat$ID <- factor(dat$ID, levels=lvl, labels=lab);
+            backSort <- levels(dat$ID);
+            backSort2 <- seq_along(backSort)
+            dat$ID <- as.integer(dat$ID);
+        } else if (idSort == 0L){
+            warning("Sorting by ID, TIME; Output fit may not be in the same order as input dataset.")
+            dat <- dat[order(dat$ID, dat$TIME), ];
+            lvl <- unique(dat$ID);
+            lab <- paste(lvl)
+            dat$ID <- factor(dat$ID, levels=lvl, labels=lab);
+            backSort <- levels(dat$ID);
+            backSort2 <- seq_along(backSort)
+            dat$ID <- as.integer(dat$ID);
+        }
+    }
     uif$env$infusion <- .Call(`_nlmixr_chkSolvedInf`, as.double(dat$EVID), as.integer(!is.null(uif$nmodel$lin.solved)));
     bad.focei <- "Problem calculating residuals, returning fit without residuals.";
+    fix.dat <- function(x){
+        if (length(backSort) > 0){
+            cls <- class(x);
+            class(x) <- "data.frame";
+            x$ID <- factor(x$ID, backSort2, labels=backSort);
+            class(x) <- cls;
+            return(x);
+        } else {
+            return(x);
+        }
+    }
     if (est == "saem"){
         pt <- proc.time()
         args <- as.list(match.call(expand.dots=TRUE))[-1]
@@ -212,16 +263,27 @@ nlmixr_fit <- function(uif, data, est="nlme", control=list(), ...,
                 warning(bad.focei)
                 return(fit)
             } else {
+                ret <- fix.dat(ret);
+                env <- attr(ret, ".focei.env")
+                assign("start.time", start.time, env);
+                assign("est", est, env);
+                assign("stop.time", Sys.time(), env);
                 return(ret)
             }
-        } else  {
+        } else {
             return(fit);
         }
-    } else if (est == "nlme"){
+    } else if (est == "nlme" || est == "nlme.mu"){
         pt <- proc.time()
-        fun <- uif$nlme.fun;
-        specs <- uif$nlme.specs;
-        grp.fn <- uif$grp.fn
+        if (est == "nlme"){
+            fun <- uif$nlme.fun;
+            specs <- uif$nlme.specs;
+        } else {
+            fun <- uif$nlme.fun.mu;
+            specs <- uif$nlme.specs.mu;
+            stop("Need to incorporate covariates to use this type of model...");
+        }
+        grp.fn <- uif$grp.fn;
         dat$nlmixr.grp <- factor(apply(data, 1, function(x){
             cur <- x;
             names(cur) <- names(dat);
@@ -272,6 +334,11 @@ nlmixr_fit <- function(uif, data, est="nlme", control=list(), ...,
             ## } else {
             ##     return(ret)
             ## }
+            ret <- fix.dat(ret);
+            env <- attr(ret, ".focei.env")
+            assign("start.time", start.time, env);
+            assign("est", est, env);
+            assign("stop.time", Sys.time(), env);
             return(ret)
         } else  {
             return(fit);
@@ -302,8 +369,12 @@ nlmixr_fit <- function(uif, data, est="nlme", control=list(), ...,
         for (i in w){
             uif.new$ini$est[i] <- ome[uif.new$ini$neta1[i], uif.new$ini$neta2[i]];
         }
+        fit <- fix.dat(fit);
         env$uif.new <- uif.new;
         class(fit) <- c("nlmixr.ui.focei.fit", class(fit));
+        assign("start.time", start.time, env);
+        assign("est", est, env);
+        assign("stop.time", Sys.time(), env);
         return(fit);
     }
 }

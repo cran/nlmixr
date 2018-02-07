@@ -1,4 +1,3 @@
-// [[Rcpp::depends(RcppArmadillo)]]
 #include <stdarg.h>
 #include <RcppArmadillo.h>
 #include <R.h>
@@ -789,7 +788,10 @@ NumericVector RxODE_focei_finalize_llik(SEXP rho){
   }
   ret.attr("posthoc") = as<NumericVector>(e["eta"]);
   if (e.exists("c.hess")){
-    ret.attr("c.hess") = as<NumericVector>(e["c.hess"]);
+    Nullable<NumericVector> cHess  = e["c.hess"];
+    if (!cHess.isNull()){
+      ret.attr("c.hess") = cHess;
+    }
   }
   ret.attr("corrected") = as<NumericVector>(e["corrected"]);
   rxDetaDomega(e);
@@ -1451,7 +1453,10 @@ void rxDetaDtheta(SEXP rho){
     mat etam = as<mat>(e["eta.mat"]);
     ret.attr("posthoc") = as<NumericVector>(wrap(e["eta.mat"]));
     if (e.exists("c.hess")){
-      ret.attr("c.hess") = as<NumericVector>(e["c.hess"]);
+      Nullable<NumericVector> cHess  = e["c.hess"];
+      if (!cHess.isNull()){
+        ret.attr("c.hess") = as<NumericVector>(e["c.hess"]);
+      }
     }
     if (e.exists("inits.vec")){
       // This calculation is done on the non-scaled parameters, but
@@ -1543,7 +1548,7 @@ NumericVector rxUpdateEtas(SEXP DnDhS, SEXP DhS, SEXP initS, SEXP acceptNS){
     prod = cur * Dh;
     accept = 1;
     for (j = 0; j < prod.n_rows; j++){
-      if (abs(prod(j,0)+inits(i, j)) > acceptN){
+      if (fabs(prod(j,0)+inits(i, j)) > acceptN){
         accept = 0;
         break;
       }

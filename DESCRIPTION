@@ -5,11 +5,11 @@ Title: Nonlinear Mixed Effects Models in Population Pharmacokinetics
 Depends: R (>= 3.2), nlme, RxODE
 Imports: Rcpp (>= 0.12.3), brew, lattice, parallel, lbfgs, inline,
         dparser, methods, ggplot2, memoise, rex, minqa, Matrix,
-        numDeriv, R.utils, mvtnorm, n1qn1
+        numDeriv, R.utils, mvtnorm, n1qn1, PreciseSums
 Suggests: knitr, rmarkdown, dplyr, data.table, lbfgsb3, testthat,
         madness, devtools, expm, matrixcalc, reshape2
-Version: 0.9.0-1
-Date: 2017-10-15
+Version: 0.9.0-3
+Date: 2018-02-06
 Authors@R: c(person("Matthew","Fidler",
       role = "aut", email = "matthew.fidler@gmail.com"),      
    person("Yuan", "Xiong", 
@@ -20,7 +20,9 @@ Authors@R: c(person("Matthew","Fidler",
       role = "aut", email = "justin.wilkins@occams.com"),
    person("Mirjam","Trame",
       role = "aut", email = "mirjam.trame@gmail.com"),   
-   person("Robert","Leary", role = "ctb"),
+  person("Teun","Post",
+      role = "aut", email = "t.post@lapp.nl"),   
+  person("Robert","Leary", role = "ctb"),
    person("Wenping", "Wang", 
       role = c("aut", "cre"), email = "wwang8198@gmail.com"),
    person("Hadley","Wickham", role = "ctb"),
@@ -42,18 +44,19 @@ Description: Fit and compare nonlinear mixed-effects models in differential
     (Wang, Hallow, and James 2015 <doi:10.1002/psp4.12052>).
 License: GPL (>= 2)
 NeedsCompilation: yes
-LinkingTo: RcppArmadillo (>= 0.5.600.2.0), dparser(>= 0.1.7), Rcpp (>=
+LinkingTo: RcppArmadillo (>= 0.5.600.2.0), dparser(>= 0.1.8), Rcpp (>=
         0.12.3), RcppEigen (>= 0.3.3.3.0), StanHeaders, BH
 URL: https://github.com/nlmixrdevelopment/nlmixr
 LazyData: true
 VignetteBuilder: knitr
 RoxygenNote: 6.0.1
-Packaged: 2017-11-08 18:36:37 UTC; annie
+Packaged: 2018-02-07 14:04:07 UTC; annie
 Author: Matthew Fidler [aut],
   Yuan Xiong [aut],
   Rik Schoemaker [aut],
   Justin Wilkins [aut],
   Mirjam Trame [aut],
+  Teun Post [aut],
   Robert Leary [ctb],
   Wenping Wang [aut, cre],
   Hadley Wickham [ctb],
@@ -67,4 +70,4 @@ Author: Matthew Fidler [aut],
   Jianming Jin [cph]
 Maintainer: Wenping Wang <wwang8198@gmail.com>
 Repository: CRAN
-Date/Publication: 2017-11-09 11:54:55 UTC
+Date/Publication: 2018-02-07 15:50:30 UTC

@@ -601,6 +601,12 @@ refresh <- function(){
     source(devtools::package_file("build/refresh.R"))
     ## nocov end
 }
+
+nsis <- function(){ ## build installer...
+    ## nocov start
+    source(devtools::package_file("build/nsis.R"))
+    ## nocov end
+}
 ##' Collect warnings and just warn once.
 ##'
 ##' @param expr R expression
@@ -608,10 +614,29 @@ refresh <- function(){
 ##' @author Matthew L. Fidler
 collectWarnings <- function(expr){
     ws <- c();
-    ret <- suppressWarnings(withCallingHandlers(expr,warning=function(w){ws <<- unique(c(w$message, ws))}))
+    this.env <- environment()
+    ret <- suppressWarnings(withCallingHandlers(expr,warning=function(w){assign("ws", unique(c(w$message, ws)), this.env)}))
     for (w in ws){
         warning(w)
     }
     return(ret);
 }
 
+##' Print x using the message facility
+##'
+##' This allows the suppressMessages to work on print functions.  This
+##' captures the output via R.Util's captureOutput function and then
+##' sends it through the message routine.
+##'
+##' catpureOutput was used since it is much faster than the internal
+##' capture.output see https://www.r-bloggers.com/performance-captureoutput-is-much-faster-than-capture-output/
+##' @param x object to print
+##' @param ... Other things output
+##' @author Matthew L. Fidler
+##' @export
+##' @keywords internal
+nlmixrPrint <- function(x, ...){
+    this.env <- environment();
+    message(invisible(paste(R.utils::captureOutput(assign("x", print(x, ...), this.env)), collapse="\n")), appendLF=TRUE);
+    invisible(x)
+}

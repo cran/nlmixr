@@ -125,12 +125,12 @@ print.focei.fit <- function(x, ...) {
         if (!is.null(nlme)){
             message("FOCEi-based goodness of fit metrics:")
         }
-        RxODE::rxPrint(df.objf)
+        nlmixrPrint(df.objf)
         if (!is.null(nlme)){
             message("\nnlme-based goodness of fit metrics:")
             df.objf <- data.frame(AIC=AIC(as.nlme(x)), BIC=BIC(as.nlme(x)),"Log-likelihood"=as.numeric(logLik(as.nlme(x))),
                                   row.names="", check.names=FALSE)
-            RxODE::rxPrint(df.objf)
+            nlmixrPrint(df.objf)
         }
         message("\nTime (sec; $time):");
         print(fit$time);
@@ -138,17 +138,18 @@ print.focei.fit <- function(x, ...) {
         print(x$par.fixed)
         message("\nOmega ($omega):");
         print(fit$omega);
-        is.data.table <- requireNamespace("data.table", quietly = TRUE);
         message("\nFit Data (object is a modified data.frame):")
-        if (is.data.table){
-            print(data.table::data.table(x), topn=n);
-        } else {
-            is.dplyr <- requireNamespace("dplyr", quietly = TRUE);
-            if (!is.dplyr){
-                print(head(as.matrix(x), n = n));
+
+        is.dplyr <- requireNamespace("dplyr", quietly = TRUE);
+        if (!is.dplyr){
+            is.data.table <- requireNamespace("data.table", quietly = TRUE);
+            if (is.data.table){
+                print(data.table::data.table(x), topn=n);
             } else {
-                print(dplyr::as.tbl(x), n = n, width = width);
+                print(head(as.matrix(x), n = n));
             }
+        } else {
+            print(dplyr::as.tbl(x), n = n, width = width);
         }
     } else {
         print(as.data.frame(x));
@@ -414,11 +415,11 @@ print.nlmixr.par.fixed <- function(x, ...){
                                 ifelse(x$Estimate * 100 == x$Untransformed, "%", ""));
     ci <- attr(x, "ci")
     df[, sprintf("(%s%%CI)", ci * 100)] <- sprintf("%s%s%s%s%s",
-                                                 ifelse(is.na(df$Lower.ci) | is.na(df$Lower.ci), "", "("),
-                                                 F2(df$Lower.ci, digs),
-                                                 ifelse(is.na(df$Lower.ci) | is.na(df$Lower.ci), "", ", "),
-                                                 F2(df$Upper.ci, digs),
-                                                 ifelse(is.na(df$Lower.ci) | is.na(df$Lower.ci), "", ")"));
+                                                   ifelse(is.na(df$Lower.ci) | is.na(df$Lower.ci), "", "("),
+                                                   F2(df$Lower.ci, digs),
+                                                   ifelse(is.na(df$Lower.ci) | is.na(df$Lower.ci), "", ", "),
+                                                   F2(df$Upper.ci, digs),
+                                                   ifelse(is.na(df$Lower.ci) | is.na(df$Lower.ci), "", ")"));
     df <- df[, regexpr("[.]ci", names(df)) == -1]
     if (all(df$Parameter == "")){
         df <- df[, -1];
@@ -430,6 +431,17 @@ print.nlmixr.par.fixed <- function(x, ...){
         }
     }
     print(df)
+}
+
+##'@export
+print.nlmixr.shrink <- function(x, ...){
+    tmp <- x;
+    class(tmp) <- NULL;
+    tmp <- (sprintf("%s%%", round(tmp, 3)));
+    names(tmp) <- names(x);
+    tmp <- data.frame(t(tmp))
+    rownames(tmp) <- "";
+    print(tmp)
 }
 
 ##' Extract residuals from the FOCEI fit
@@ -941,15 +953,15 @@ focei.fit.data.frame0 <- function(data,
     }
     optim <- con$optim;
     optim.method <- match.arg(optim, c( ## "n1qn1",
-                                             "bobyqa",
-                                             "L-BFGS-B",
-                                             "BFGS",
-                                             "lbfgs",
-                                             "lbfgsb3",
-                                             ## "newuoa",
-                                             "nlminb"##,
-                                             ## "uobyqa"
-                                         ))
+                                         "bobyqa",
+                                         "L-BFGS-B",
+                                         "BFGS",
+                                         "lbfgs",
+                                         "lbfgsb3",
+                                         ## "newuoa",
+                                         "nlminb"##,
+                                         ## "uobyqa"
+                                     ))
     grad.methods <- c("BFGS", "L-BFGS-B", "lbfgs", "lbfgsb3", "nlminb", "mma", "slsqp", "lbfgs-nlopt", "tnewton_precond_restart",
                       "tnewton_precond", "tnewton", "var1", "var2", "n1qn1")
     print.grad <- any(optim.method == grad.methods);
@@ -1018,11 +1030,11 @@ focei.fit.data.frame0 <- function(data,
             message("Model:")
             RxODE::rxCat(model$pred.only)
             message("Needed Covariates:")
-            RxODE::rxPrint(cov.names)
+            nlmixrPrint(cov.names)
             stop("Not all the covariates are in the dataset.")
         }
         message("Needed Covariates:")
-        RxODE::rxPrint(cov.names)
+        nlmixrPrint(cov.names)
     }
 
     ## RxODE(rxNorm(model$inner), modName="test");
@@ -1107,7 +1119,7 @@ focei.fit.data.frame0 <- function(data,
     }
     if (!con$NOTRUN){
         message("Boundaries:");
-        RxODE::rxPrint(data.frame(lower,inits.vec,upper));
+        nlmixrPrint(data.frame(lower,inits.vec,upper));
     }
     names(inits.vec) = NULL
     if (con$scale.to == 0){
@@ -1130,7 +1142,7 @@ focei.fit.data.frame0 <- function(data,
     par.upper[w.neg] <- tmp;
     if (!con$NOTRUN){
         if (!is.null(con$scale.to)){
-            RxODE::rxPrint(data.frame(par.lower,scaled=rep(con$scale.to, length(inits.vec)),par.upper))
+            nlmixrPrint(data.frame(par.lower,scaled=rep(con$scale.to, length(inits.vec)),par.upper))
         }
         if (do.sink){
             message("\nKey:")
@@ -1311,7 +1323,7 @@ focei.fit.data.frame0 <- function(data,
             }
         }
     }
-    curi <<- 0;
+    curi <- 0;
     ofv.cache <- new.env(parent=emptyenv())
     ofv.cache$last1 <- NULL;
     ofv.cache$last <- NULL;
@@ -1464,7 +1476,7 @@ focei.fit.data.frame0 <- function(data,
     ofv.FOCEi <- function(pars) {
         llik.subj <- ofv.FOCEi.ind(pars)
         first <<- FALSE
-        llik <- -2*RxODE::rxSum(unlist(llik.subj));
+        llik <- -2*PreciseSums::psSum(unlist(llik.subj));
         corrected <- do.call("sum", (lapply(llik.subj, function(x){attr(x, "corrected")})))
         ofv <- llik;
         reset <- FALSE;
@@ -1718,9 +1730,9 @@ focei.fit.data.frame0 <- function(data,
             }
         } else if (optim.method=="nlminb") {
             fit <- try({nlminb(par0,
-                                ofv.FOCEi, gradient=gr.FOCEi,
-                                control=list(trace=1, rel.tol=con$reltol.outer),
-                                lower=par.lower,
+                               ofv.FOCEi, gradient=gr.FOCEi,
+                               control=list(trace=1, rel.tol=con$reltol.outer),
+                               lower=par.lower,
                                upper=par.upper)});
             if (inherits(fit, "try-error") && !is.null(sigdig.fit)){
                 if (attr(fit, "condition")$message == "sigidig exit"){
@@ -1753,8 +1765,8 @@ focei.fit.data.frame0 <- function(data,
 
         ## while( identical( this.env, globalenv() ) == FALSE ) {
         parallel::clusterExport(cl,
-                                    ls(all.names=TRUE, envir=this.env),
-                                    envir=this.env)
+                                ls(all.names=TRUE, envir=this.env),
+                                envir=this.env)
         ##     this.env <- parent.env(environment())
         ## }
         parallel::clusterExport(cl,
@@ -2049,11 +2061,17 @@ focei.fit.data.frame0 <- function(data,
         calculate.vars <- calculate.vars[calculate.vars != "pred"];
         ## message("done.")
     }
+    fit$eps.shrink <- NA
+    fit$eta.shrink <- NA
     for (v in calculate.vars){
         if (v != "pred"){
             ## message(sprintf("\t%s", v), appendLF=FALSE)
             data[, toupper(v)] <- resid(data, type=v);
             ## message("done.")
+            if (v == "iwres"){
+                ## Now add shrinkages.
+                fit$eps.shrink <- structure((1 - stats::sd(data$IWRES)) * 100, .Names="eps", class="nlmixr.shrink");
+            }
         }
     }
     if (con$add.posthoc){
@@ -2062,7 +2080,19 @@ focei.fit.data.frame0 <- function(data,
         ## Drops the class/environment; Put back in.
         attr(data, ".focei.env") <- env;
         class(data) <- c("focei.fit", "data.frame")
+        ## Adapted
+        om <- diag(fit$omega)
+        d <- etas[,-1]
+        eshr <- sapply(seq_along(om), function(i){
+            return((1 - (stats::sd(d[,i]) / sqrt(om[i])))*100);
+        })
+        names(eshr) <- names(d);
+        class(eshr) <- "nlmixr.shrink"
+        fit$eta.shrink <- eshr;
     }
+
+
+    ## FIXME -- add lhs/state variables to the data-frame.
     ## data <- merge(data, m);
     table.time <- proc.time() - pt;
     fit$table.time <- table.time;
@@ -2096,6 +2126,16 @@ focei.fit.data.frame0 <- function(data,
             return(fixed.effects(obj, full=TRUE));
         } else if (arg == "eta"){
             return(random.effects(obj));
+        } else if (arg == "seed"){
+            if (is(obj, "nlmixr.ui.saem")){
+                return(attr(as.saem(obj),"saem.cfg")$seed)
+            } else {
+                return(NA);
+            }
+        } else if (arg == "model.name"){
+            return(env$uif$model.name);
+        } else if (arg == "data.name"){
+            return(env$uif$data.name);
         } else {
             fit <- env$fit;
             ret <- fit[[arg, exact = exact]]
@@ -2136,8 +2176,9 @@ str.focei.fit <- function(object, ...){
     message(" $ par.hist.stacked : Parameter history in stacked form for easy plotting (if available)")
     message(" $ par.fixed        : Fixed Effect Parameter Table")
     message(" $ eta              : Individual Parameter Estimates")
-
-
+    message(" $ seed             : Seed (if applicable)");
+    message(" $ model.name       : Model name (from R function)");
+    message(" $ data.name        : Name of R data input");
 }
 
 ##' @export
