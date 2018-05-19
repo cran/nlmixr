@@ -17,17 +17,6 @@ BEGIN_RCPP
     return R_NilValue;
 END_RCPP
 }
-// rxInnerNum
-void rxInnerNum(SEXP etanews, SEXP rho);
-RcppExport SEXP _nlmixr_rxInnerNum(SEXP etanewsSEXP, SEXP rhoSEXP) {
-BEGIN_RCPP
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< SEXP >::type etanews(etanewsSEXP);
-    Rcpp::traits::input_parameter< SEXP >::type rho(rhoSEXP);
-    rxInnerNum(etanews, rho);
-    return R_NilValue;
-END_RCPP
-}
 // rxInner
 void rxInner(SEXP etanews, SEXP rho);
 RcppExport SEXP _nlmixr_rxInner(SEXP etanewsSEXP, SEXP rhoSEXP) {
@@ -276,6 +265,33 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< Eigen::Map<Eigen::VectorXd> >::type y(ySEXP);
     Rcpp::traits::input_parameter< Eigen::Map<Eigen::VectorXd> >::type params(paramsSEXP);
     rcpp_result_gen = Rcpp::wrap(llik_neg_binomial(y, params));
+    return rcpp_result_gen;
+END_RCPP
+}
+// nlmixrParameters
+List nlmixrParameters(NumericVector theta, DataFrame eta);
+RcppExport SEXP _nlmixr_nlmixrParameters(SEXP thetaSEXP, SEXP etaSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type theta(thetaSEXP);
+    Rcpp::traits::input_parameter< DataFrame >::type eta(etaSEXP);
+    rcpp_result_gen = Rcpp::wrap(nlmixrParameters(theta, eta));
+    return rcpp_result_gen;
+END_RCPP
+}
+// nlmixrResid
+List nlmixrResid(List& innerList, NumericMatrix& omegaMat, NumericVector& dv, DataFrame etasDf, List etaLst);
+RcppExport SEXP _nlmixr_nlmixrResid(SEXP innerListSEXP, SEXP omegaMatSEXP, SEXP dvSEXP, SEXP etasDfSEXP, SEXP etaLstSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< List& >::type innerList(innerListSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix& >::type omegaMat(omegaMatSEXP);
+    Rcpp::traits::input_parameter< NumericVector& >::type dv(dvSEXP);
+    Rcpp::traits::input_parameter< DataFrame >::type etasDf(etasDfSEXP);
+    Rcpp::traits::input_parameter< List >::type etaLst(etaLstSEXP);
+    rcpp_result_gen = Rcpp::wrap(nlmixrResid(innerList, omegaMat, dv, etasDf, etaLst));
     return rcpp_result_gen;
 END_RCPP
 }

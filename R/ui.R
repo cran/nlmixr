@@ -106,17 +106,16 @@ nlmixrUI <- function(fun){
 ##' @author Matthew L. Fidler
 ##' @export
 print.nlmixrUI <- function(x, ...){
-    message(paste0("## ", x$model.desc ))
-    message("## Initialization:")
-    message("################################################################################")
+    message(cli::rule(x$model.desc, line="bar2"))
+    message(cli::rule(crayon::bold("Initialization:")))
     print(x$ini)
     if (length(x$all.covs) > 0){
         message("\n Covariates or Uninitialized Parameters ($all.covs)")
         print(x$all.covs);
     }
-    message(sprintf("\n## Model%s:", ifelse(class(x$rxode) == "RxODE", " (RxODE)", "")))
-    message("################################################################################")
+    message(cli::rule(crayon::bold(sprintf("Model%s:", ifelse(class(x$rxode) == "RxODE", " (RxODE)", "")))))
     message(x$fun.txt)
+    message(cli::rule(line="bar2"))
 }
 
 ## This is a list of supported distributions with the number of arguments they currently support.
@@ -412,7 +411,7 @@ nlmixrUIModel <- function(fun, ini=NULL, bigmodel=NULL){
     theta.names <-  c()
     theta.ord <- c();
     eta.names <- c();
-    mu.ref <- list();
+    .mu.ref <- list();
     cov.ref <- list();
     log.theta <- c();
     log.eta <- c();
@@ -513,7 +512,7 @@ nlmixrUIModel <- function(fun, ini=NULL, bigmodel=NULL){
                         return(quote(nlmixrIgnore()))
                     }
                 } else {
-                    if (do.pred == 2 || do.pred == 4){
+                    if (any(do.pred == c(2, 4, 5))){
                         return(x);
                     } else {
                         if (length(nargs) == 1){
@@ -548,10 +547,10 @@ nlmixrUIModel <- function(fun, ini=NULL, bigmodel=NULL){
                     any(err2 == add.dists)){
                     tmp <- paste(sort(c(err1, err2)), collapse="+");
                     assign("errs.specified", unique(errs.specified, tmp), this.env)
-                    if (do.pred == 2 || do.pred == 4){
+                    if (any(do.pred == c(2, 4, 5))){
                         return(quote(nlmixrIgnore()));
                     }
-                    else if (do.pred == 1 || do.pred == 4){
+                    else if (any(do.pred == c(1, 4, 5))){
                         return(bquote(nlmixr_pred <- .(x[[2]]))) ;
                     } else if (do.pred == 3){
                         w <- which(bounds$name == err1.v);
@@ -560,7 +559,7 @@ nlmixrUIModel <- function(fun, ini=NULL, bigmodel=NULL){
                         w <- which(bounds$name == err2.v);
                         tmp$err[w] <- err2;
                         assign("bounds", tmp, this.env);
-                        if (any(tmp == c("norm+prop", "add+prop"))){
+                        if ((any(paste(tmp$err) == "add") || any(paste(tmp$err) == "norm")) && any(paste(tmp$err) == "prop")){
                             assign("errn", errn + 1, this.env);
                             assign("add.prop.errs", rbind(add.prop.errs,
                                                           data.frame(y=sprintf("Y%02d", errn), add=TRUE, prop=TRUE)), this.env);
@@ -576,15 +575,15 @@ nlmixrUIModel <- function(fun, ini=NULL, bigmodel=NULL){
                 }
             } else if (identical(x[[1]], quote(`~`)) && (do.pred != 2)){
                 return(quote(nlmixrIgnore()))
-            } else if (identical(x[[1]], quote(`<-`)) && !any(do.pred == c(2, 4) )){
+            } else if (identical(x[[1]], quote(`<-`)) && !any(do.pred == c(2, 4, 5) )){
                 return(quote(nlmixrIgnore()))
-            } else if (identical(x[[1]], quote(`=`)) && !any(do.pred == c(2, 4))){
+            } else if (identical(x[[1]], quote(`=`)) && !any(do.pred == c(2, 4, 5))){
                 return(quote(nlmixrIgnore()))
             } else if (identical(x[[1]], quote(`<-`)) && do.pred == 4){
                 ## SAEM requires = instead of <-
                 x[[1]] <- quote(`=`);
                 return(as.call(lapply(x, f)))
-            } else if (identical(x[[1]], quote(`exp`)) && do.pred == 4){
+            } else if (identical(x[[1]], quote(`exp`)) && any(do.pred == c(4, 5))){
                 ## Need traverse the parsing tree to get log theta/eta
                 ## parameters.
                 find.log <- function(x){
@@ -608,7 +607,7 @@ nlmixrUIModel <- function(fun, ini=NULL, bigmodel=NULL){
                 return(as.call(lapply(x, f)))
             } else if (identical(x[[1]], quote(`+`))){
                 ## print(as.character(x))
-                if (do.pred == 4){
+                if (any(do.pred == c(4, 5))){
                     if (length(x) >= 3){
                         ## message("---")
                         ## print(x[[1]])
@@ -640,7 +639,7 @@ nlmixrUIModel <- function(fun, ini=NULL, bigmodel=NULL){
                                 cov <- all.covs[w];
                                 th <- as.character(x[[wm]][[th]]);
                                 th0 <- find.theta(x[[wm0]]);
-                                if (length(th0) == 1){
+                                if (length(th0) == 1 &&  do.pred == 4){
                                     tmp <- get("cov.ref", this.env)
                                     tmp[[cov]] <- c(tmp[[cov]], structure(th0, .Names=th));
                                     assign("cov.ref", tmp, this.env);
@@ -651,17 +650,19 @@ nlmixrUIModel <- function(fun, ini=NULL, bigmodel=NULL){
                         if (any.theta.names(as.character(x[[2]]), eta.names) &&
                             any.theta.names(as.character(x[[3]]), theta.names)){
                             ## Found ETA+THETA
-                            tmp <- mu.ref;
+                            tmp <- .mu.ref;
                             tmp[[as.character(x[[2]])]] <- as.character(x[[3]]);
-                            assign("mu.ref", tmp, this.env);
+                            ## assign("mu.ref", tmp, this.env);
+                            .mu.ref <<- tmp
                             ## Collapse to THETA
                             return(x[[3]])
                         } else if (any.theta.names(as.character(x[[3]]), eta.names) &&
                                    any.theta.names(as.character(x[[2]]), theta.names)){
                             ## Found THETA+ETA
-                            tmp <- mu.ref
+                            tmp <- .mu.ref
                             tmp[[as.character(x[[3]])]] <- as.character(x[[2]]);
-                            assign("mu.ref", tmp, this.env)
+                            ## assign(".mu.ref", tmp, this.env)
+                            .mu.ref <<- tmp
                             ## Collapse to THETA
                             ## model$omega=diag(c(1,1,0))
                             ## 0 is not estimated.
@@ -681,9 +682,10 @@ nlmixrUIModel <- function(fun, ini=NULL, bigmodel=NULL){
                             eta <- as.character(x[[3]]);
                             th <- find.theta(x[[2]]);
                             if (length(th) == 1){
-                                tmp <- mu.ref
+                                tmp <- .mu.ref
                                 tmp[[eta]] <- th;
-                                assign("tmp", mu.ref, this.env)
+                                ## assign("tmp", .mu.ref, this.env)
+                                .mu.ref <<- tmp
                                 return(f(as.call(x[[2]])));
                             }
                         } else if (length(x) < 3) {
@@ -693,7 +695,7 @@ nlmixrUIModel <- function(fun, ini=NULL, bigmodel=NULL){
                             ## And collapses to 123  + 123 + Cl + 123
                             ## Useful for covariates...
                             theta <- as.character(x[[3]]);
-                            etas <- c();
+                            .etas <- c();
                             find.etas <- function(x){
                                 if (is.atomic(x) || is.name(x)) {
                                     return(x)
@@ -702,7 +704,7 @@ nlmixrUIModel <- function(fun, ini=NULL, bigmodel=NULL){
                                 } else if (is.call(x)) {
                                     if (identical(x[[1]], quote(`+`)) &&
                                         any.theta.names(as.character(x[[3]]), eta.names)){
-                                        assign("etas", c(etas,as.character(x[[3]])), this.env)
+                                        .etas <<- c(.etas,as.character(x[[3]]));
                                         return(x[[2]]);
                                     }
                                     return(as.call(lapply(x, find.etas)));
@@ -712,10 +714,11 @@ nlmixrUIModel <- function(fun, ini=NULL, bigmodel=NULL){
                                 }
                             }
                             new <- find.etas(x[[2]]);
-                            if (length(etas) == 1){
-                                tmp <- mu.ref;
-                                tmp[[etas]] <- theta;
-                                assign("tmp", mu.ref, this.env);
+                            if (length(.etas) == 1){
+                                tmp <- .mu.ref;
+                                tmp[[.etas]] <- theta;
+                                ## assign("tmp", .mu.ref, this.env);
+                                .mu.ref <<- tmp
                                 x[[2]] <- new;
                             }
                         }
@@ -736,7 +739,16 @@ nlmixrUIModel <- function(fun, ini=NULL, bigmodel=NULL){
     }
     rm.empty <- function(x){
         ## empty if/else
-        x <- x[regexpr(rex::rex(any_spaces, "nlmixrIgnore()", any_spaces), x, perl=TRUE) == -1];
+        ## First remove if () followed by nlmixrIgnore()
+        ignoreit <- rex::rex(any_spaces, "nlmixrIgnore()", any_spaces)
+        w1 <- which(regexpr(rex::rex(start, any_spaces, or(group("if", any_spaces, "(", anything, ")"), "else"),any_spaces, end), x) != -1);
+        if (length(w1) > 0){
+            w2 <- which(regexpr(ignoreit, x[w1 + 1]) != -1)
+            if (length(w2) > 0){
+                x <- x[-w1[w2]];
+            }
+        }
+        x <- x[regexpr(ignoreit, x, perl=TRUE) == -1];
         w1 <- which(regexpr(rex::rex(start, any_spaces, or("if", "else"), anything, "{", end), x) != -1)
         if (length(w1) > 0){
             w2 <- w1 + 1;
@@ -777,7 +789,16 @@ nlmixrUIModel <- function(fun, ini=NULL, bigmodel=NULL){
     do.pred <- 3;
     grp.fn <- new.fn(deparse(f(body(fun))));
     do.pred <- 4;
-    saem.pars <- deparse(f(body(fun)));
+    saem.pars <- try(deparse(f(body(fun))), silent=TRUE);
+    nlme.mu.fun2 <- NULL
+    if (inherits(saem.pars, "try-error")){
+        saem.pars <- NULL
+    }
+    do.pred <- 5;
+    nlme.mu.fun <- try(deparse(f(body(fun))), silent=TRUE);
+    if (inherits(nlme.mu.fun, "try-error")){
+        nlme.mu.fun <- NULL
+    }
     if (rxode){
         rx.txt <- deparse(body(rest))[-1]
         rx.txt <- rx.txt[-length(rx.txt)];
@@ -797,16 +818,25 @@ nlmixrUIModel <- function(fun, ini=NULL, bigmodel=NULL){
             ## Now separate out parameters for SAEM.
             w <- max(which(regexpr(reg, saem.pars, perl=TRUE) != -1));
             saem.pars <- c(saem.pars[1:w], "");
+            nlme.mu.fun2 <- saem.pars;
+            w <- max(which(regexpr(reg, nlme.mu.fun, perl=TRUE) != -1));
+            nlme.mu.fun <- c(nlme.mu.fun[1:w], "");
         }
         rxode <- paste(rx.ode, collapse="\n")
         rest <- rx.pred;
         all.vars <- all.vars[!(all.vars %in% RxODE::rxState(rxode))]
         rest.vars <- rest.vars[!(rest.vars %in% RxODE::rxState(rxode))]
+        all.covs <- setdiff(rest.vars,paste0(bounds$name))
+        all.covs <- all.covs[!(all.covs %in% RxODE::rxLhs(rxode))]
+        all.covs <- all.covs[!(all.covs %in% RxODE::rxState(rxode))]
+        all.covs <- setdiff(all.covs,c("t", "time", "podo", "M_E","M_LOG2E","M_LOG10E","M_LN2","M_LN10","M_PI","M_PI_2","M_PI_4","M_1_PI",
+                                       "M_2_PI","M_2_SQRTPI","M_SQRT2","M_SQRT1_2","M_SQRT_3","M_SQRT_32","M_LOG10_2","M_2PI","M_SQRT_PI",
+                                       "M_1_SQRT_2PI","M_SQRT_2dPI","M_LN_SQRT_PI","M_LN_SQRT_2PI","M_LN_SQRT_PId2","pi"))
     } else {
+        all.covs <- setdiff(rest.vars,paste0(bounds$name))
+        nlme.mu.fun2 <- saem.pars
         rxode <- NULL
     }
-    ## FIXME test for compartments that were picked up a covariates...
-    all.covs <- setdiff(rest.vars,paste0(bounds$name))
     fun2 <- as.character(attr(fun, "srcref"), useSource=TRUE)
     fun2[1] <- "function(){"
     fun2[length(fun2)] <- "}";
@@ -883,9 +913,20 @@ nlmixrUIModel <- function(fun, ini=NULL, bigmodel=NULL){
         add.prop.errs <- data.frame(y="Y1", add=TRUE, prop=FALSE);
         lin.solved <- nlmixrUILinCmt(all.lhs)
     }
-    saem.pars <- new.fn(saem.pars)
+    if (!is.null(saem.pars)){
+        saem.pars <- new.fn(saem.pars)
+        saem.theta.trans <- rep(NA, length(theta.names));
+    } else {
+        saem.pars <- NULL
+        saem.theta.trans <- NULL
+    }
+    if (!is.null(nlme.mu.fun)){
+        nlme.mu.fun <- new.fn(nlme.mu.fun)
+    }
+    if (!is.null(nlme.mu.fun2)){
+        nlme.mu.fun2 <- new.fn(nlme.mu.fun2)
+    }
 
-    saem.theta.trans <- rep(NA, length(theta.names));
     cov.theta.pars <- gsub(rex::rex(or(all.covs), "."), "", names(unlist(cov.ref)))
     for (i in seq_along(theta.names)){
         if (!any(theta.names[i] == cov.theta.pars)){
@@ -910,31 +951,55 @@ nlmixrUIModel <- function(fun, ini=NULL, bigmodel=NULL){
     env <- new.env(parent=emptyenv());
     env$infusion <- FALSE
     env$sum.prod <- FALSE
+    ## Split out inPars
+    saem.all.covs <- all.covs[all.covs %in% names(cov.ref)]
+    saem.inPars <- all.covs[!(all.covs %in% names(cov.ref))]
     ret <- list(ini=bounds, model=bigmodel,
                 nmodel=list(fun=fun2, fun.txt=fun3, pred=pred, error=err, rest=rest, rxode=rxode,
                             all.vars=all.vars, rest.vars=rest.vars, all.names=all.names, all.funs=all.funs, all.lhs=all.lhs,
-                            all.covs=all.covs, lin.solved=lin.solved,
-                            errs.specified=errs.specified,
-                            add.prop.errs=add.prop.errs,
-                            grp.fn=grp.fn,
-                            mu.ref=mu.ref, cov.ref=cov.ref,
-                            saem.pars=saem.pars,
-                            log.theta=log.theta,
-                            log.eta=log.eta,
-                            theta.ord=theta.ord,
-                            saem.theta.trans=saem.theta.trans,
+                            all.covs=all.covs, saem.all.covs=saem.all.covs, saem.inPars=saem.inPars, lin.solved=lin.solved,
+                            errs.specified=errs.specified, add.prop.errs=add.prop.errs, grp.fn=grp.fn, mu.ref=.mu.ref, cov.ref=cov.ref,
+                            saem.pars=saem.pars, nlme.mu.fun=nlme.mu.fun, nlme.mu.fun2=nlme.mu.fun2, log.theta=log.theta,
+                            log.eta=log.eta, theta.ord=theta.ord, saem.theta.trans=saem.theta.trans,
                             env=env))
     return(ret)
 }
 ##' Create the nlme specs list for nlmixr nlme solving
-##'
-##' @param object UI object
-##' @param mu.ref Use mu-referencing for nlme.
+##' @inheritParams nlmixrUI.nlmefun
+##' @param mu.type is the mu-referencing type of model hat nlme will be using.
 ##' @return specs list for nlme
 ##' @author Matthew L. Fidler
-nlmixrUI.nlme.specs <- function(object, mu.ref=FALSE){
-    if (mu.ref){
+nlmixrUI.nlme.specs <- function(object, mu.type=c("thetas", "covariates", "none")){
+    mu.type <- match.arg(mu.type);
+    if (mu.type == "thetas"){
         return(list(fixed=object$fixed.form,
+                    random=object$random.mu,
+                    start=object$theta))
+    } else if (mu.type == "covariates") {
+        theta <- names(object$theta);
+        cov.ref <- object$cov.ref;
+        cov.theta <- unique(as.vector(unlist(cov.ref)))
+        cov.base <- theta[!(theta %in% cov.theta)]
+        cov.base <- cov.base[!(cov.base %in% unlist(lapply(names(cov.ref), function(x){names(cov.ref[[x]])})))];
+        cov.lst <- list();
+        new.theta <- cov.base;
+        for (n in names(cov.ref)){
+            cov.base <- cov.base[!(cov.base %in% (names(cov.ref[[n]])))]
+            cur <- cov.ref[[n]]
+            for (i in seq_along(cur)){
+                m <- cur[i]
+                cov.lst[[m]] <- c(cov.lst[[m]], n);
+                new.theta <- c(new.theta, as.vector(m), names(m))
+            }
+        }
+        e1 <- paste(paste(cov.base, collapse="+"), "~ 1");
+        fixed.form <- paste(c(e1, sapply(names(cov.lst), function(x){paste(x, "~", paste(cov.lst[[x]], collapse="+"))})), collapse=", ")
+        fixed.form <- eval(parse(text=sprintf("list(%s)", fixed.form)))
+        if (length(cov.base) == 0){
+            fixed.form <- fixed.form[-1];
+        }
+        theta <- theta[new.theta]
+        return(list(fixed=fixed.form,
                     random=object$random.mu,
                     start=object$theta))
     } else {
@@ -947,19 +1012,46 @@ nlmixrUI.nlme.specs <- function(object, mu.ref=FALSE){
 ##'
 ##' @param object UI object
 ##' @param mu Is the model mu referenced?
-##' @return parameter function for nlme
+##' \itemize{
+##'
+##' \item With the "thetas" only the population parameters are
+##' mu-referenced; All covariates are included in the model parameter
+##' function.  The between subject variability pieces are specified in
+##' the \code{random} specs parameter.
+##'
+##' \item With the "covariates" option, the population parameters are
+##' mu referenced and covariates are removed from the model function.
+##' The covariates will be specified used in the fixed effects
+##' parameterization of nlme, like \code{list(lKA+lCL~1, lV~WT)}
+##'
+##' \item With the "none" option, the model function is given to nlme
+##' without any modification.
+##'
+##' }
+##' @return Parameter function for nlme
 ##' @author Matthew L. Fidler
 ##' @keywords internal
-nlmixrUI.nlmefun <- function(object, mu=FALSE){
+nlmixrUI.nlmefun <- function(object, mu.type=c("thetas", "covariates", "none")){
     ## create nlme function
+    mu.type <- match.arg(mu.type);
     if (!is.null(object$lin.solved)){
         ## This is only a solved system.
-        if (mu){
-            bod <- deparse(body(object$saem.pars));
+        if (mu.type == "thetas"){
+            bod <- deparse(body(object$nlme.mu.fun));
             bod[length(bod)] <- paste0(object$lin.solved$extra.lines, "\n}");
             bod <- eval(parse(text=sprintf("quote(%s)", paste0(bod, collapse="\n"))));
-            fn <- eval(parse(text=sprintf("function(%s) NULL", paste(unlist(object$mu.ref), collapse=", "))));
+            fn <- eval(parse(text=sprintf("function(%s) NULL", paste(unique(c(names(object$ini$theta), object$all.covs)), collapse=", "))));
             body(fn) <- bod
+            return(fn);
+        } else if (mu.type == "covariates"){
+            bod <- deparse(body(object$nlme.mu.fun2));
+            bod[length(bod)] <- paste0(object$lin.solved$extra.lines, "\n}");
+            bod <- eval(parse(text=sprintf("quote(%s)", paste0(bod, collapse="\n"))));
+            vars <- unique(c(unlist(object$mu.ref), unlist(object$cov.ref)));
+            fn <- eval(parse(text=sprintf("function(%s) NULL", paste(vars, collapse=", "))));
+            vars2 <- allVars(bod);
+            body(fn) <- bod;
+            if (length(vars) != length(vars2)) return(NULL);
             return(fn);
         } else {
             bod <- deparse(body(object$rest));
@@ -970,9 +1062,17 @@ nlmixrUI.nlmefun <- function(object, mu=FALSE){
             return(fn);
         }
     } else {
-        if (mu){
-            fn <- eval(parse(text=sprintf("function(%s) NULL", paste(unlist(object$mu.ref), collapse=", "))))
-            body(fn) <- body(object$saem.pars);
+        if (mu.type == "thetas"){
+            fn <- eval(parse(text=sprintf("function(%s) NULL", paste(unique(c(names(object$ini$theta), object$all.covs)), collapse=", "))))
+            body(fn) <- body(object$nlme.mu.fun);
+        } else if (mu.type == "covariates"){
+            vars <- unique(c(unlist(object$mu.ref), unlist(object$cov.ref)));
+            fn <- eval(parse(text=sprintf("function(%s) NULL", paste(vars, collapse=", "))))
+            body(fn) <- body(object$nlme.mu.fun2);
+            vars2 <- allVars(body(fn));
+            if (length(vars) != length(vars2)){
+                return(NULL);
+            }
         } else {
             fn <- eval(parse(text=sprintf("function(%s) NULL", paste(object$rest.vars, collapse=", "))))
             body(fn) <- body(object$rest);
@@ -1108,6 +1208,9 @@ nlmixrUI.saem.eta.trans <- function(obj){
             }
         }
     }
+    if (any(is.na(trans))){
+        stop("Could not figure out the mu-referencing for this model.")
+    }
     return(trans)
 }
 ##' Get the SAEM model Omega
@@ -1229,8 +1332,13 @@ nlmixrUI.saem.fit <- function(obj){
         } else {
             ode <- RxODE::RxODE(obj$rxode.pred);
         }
+        RxODE::rxLoad(ode);
+        obj$env$saem.ode <- ode;
+        RxODE::rxLoad(ode);
         message("done.")
-        saem.fit <- gen_saem_user_fn(model=ode, obj$saem.pars, pred=function() nlmixr_pred)
+        inPars <- obj$saem.inPars;
+        if (length(inPars) == 0) inPars <- NULL
+        saem.fit <- gen_saem_user_fn(model=ode, obj$saem.pars, pred=function() nlmixr_pred, inPars=inPars);
         message("done.")
         obj$env$saem.fit <- saem.fit;
         return(obj$env$saem.fit);
@@ -1253,8 +1361,8 @@ nlmixrUI.saem.fit <- function(obj){
 ##' @author Matthew L. Fidler
 nlmixrUI.saem.model <- function(obj){
     mod <- list(saem_mod=obj$saem.fit);
-    if (length(obj$all.covs > 0)){
-        mod$covars <- obj$all.covs;
+    if (length(obj$saem.all.covs > 0)){
+        mod$covars <- obj$saem.all.covs;
     }
     mod$res.mod <- obj$saem.res.mod;
     mod$log.eta <- obj$saem.log.eta;
@@ -1276,7 +1384,7 @@ nlmixrUI.saem.theta.name <- function(uif){
     trans.name <- paste(uif$ini$name[which(!is.na(trans))]);
     trans <- trans[!is.na(trans)]
     theta.name <- trans.name[order(trans)]
-    all.covs <- uif$all.covs
+    all.covs <- uif$saem.all.covs
     lc <- length(all.covs);
     if (lc > 0){
         m <- matrix(rep(NA, length(theta.name) * (lc + 1)), nrow=lc + 1);
@@ -1317,7 +1425,7 @@ nlmixrUI.saem.init.theta <- function(obj){
             return(obj$ini$est[w])
         }
     })
-    all.covs <- obj$all.covs;
+    all.covs <- obj$saem.all.covs;
     lc <- length(all.covs);
     if (lc > 0){
         m <- matrix(rep(NA, lc * length(theta.name)), ncol=lc)
@@ -1391,7 +1499,7 @@ nlmixrUI.model.desc <- function(obj){
         ## }
     } else {
         return(sprintf("%s-compartment model%s%s", obj$lin.solved$ncmt,
-                       ifelse(obj$lin.solved$oral, " with first-order absorption"),
+                       ifelse(obj$lin.solved$oral, " with first-order absorption", ""),
                        ifelse(obj$lin.solved$parameterization == 1, " in terms of Cl", " in terms of micro-constants"),
                        ifelse(obj$lin.solved$tlag, " (with lag time)", "")));
     }
@@ -1408,13 +1516,17 @@ nlmixrUI.model.desc <- function(obj){
     } else if (arg == "model"){
         return(x$model);
     } else if (arg == "nlme.fun.mu"){
-        return(nlmixrUI.nlmefun(obj, T))
+        return(nlmixrUI.nlmefun(obj, "thetas"))
     } else if (arg == "nlme.fun"){
-        return(nlmixrUI.nlmefun(obj))
+        return(nlmixrUI.nlmefun(obj, "none"))
+    } else if (arg == "nlme.fun.mu.cov"){
+        return(nlmixrUI.nlmefun(obj, "covariates"))
     } else if (arg == "nlme.specs"){
-        return(nlmixrUI.nlme.specs(obj))
+        return(nlmixrUI.nlme.specs(obj, "none"))
     } else if (arg == "nlme.specs.mu"){
-        return(nlmixrUI.nlme.specs(obj, T));
+        return(nlmixrUI.nlme.specs(obj, "thetas"));
+    } else if (arg == "nlme.specs.mu.cov"){
+        return(nlmixrUI.nlme.specs(obj, "covariates"));
     } else if (arg == "nlme.var"){
         return(nlmixrUI.nlme.var(obj))
     } else if (arg == "rxode.pred"){
@@ -1455,6 +1567,14 @@ nlmixrUI.model.desc <- function(obj){
         return(nlmixrUI.model.desc(obj))
     } else if (arg == "meta"){
         return(x$meta);
+    } else if (arg == ".clean.dll"){
+        if (exists(".clean.dll", envir=x$meta)){
+            clean <- x$meta$.clean.dll;
+            if (is(clean, "logical")){
+                return(clean)
+            }
+        }
+        return(TRUE);
     } else if (arg == "random.mu"){
         return(nlmixrBoundsOmega(x$ini,x$nmodel$mu.ref))
     }
@@ -1478,28 +1598,29 @@ str.nlmixrUI <- function(object, ...){
     class(obj) <- "list";
     str(obj$ini);
     str(obj$nmodel)
-    message(" $ ini       : Model initilizations/bounds object");
-    message(" $ model     : Original Model");
-    message(" $ nmodel    : Parsed Model List");
-    message(" $ nlme.fun  : The nlme model function.");
-    message(" $ nlme.specs: The nlme model specs.");
-    message(" $ nlme.var  : The nlme model varaince.")
-    message(" $ rxode.pred: The RxODE block with pred attached (final pred is nlmixr_pred)")
-    message(" $ theta.pars: Parameters in terms of THETA[#] and ETA[#]")
-    message(" $ focei.inits: Initilization for FOCEi style blocks")
-    message(" $ saem.eta.trans: UI ETA -> SAEM ETA")
-    message(" $ saem.model.omega: model$omega for SAEM")
-    message(" $ saem.res.mod: model$res.mod for SAEM")
-    message(" $ saem.ares: model$ares for SAEM")
-    message(" $ saem.bres: model$bres for SAEM")
-    message(" $ saem.log.eta: model$log.eta for SAEM")
-    message(" $ saem.fit  : The SAEM fit user function")
-    message(" $ saem.model: The SAEM model list")
-    message(" $ saem.init.theta: The SAEM init$theta")
-    message(" $ saem.init.omega: The SAEM init$omega")
-    message(" $ saem.init : The SAEM inits list")
-    message(" $ saem.theta.name : The SAEM theta names")
-    message(" $ saem.omega.name : The SAEM theta names")
-    message(" $ saem.res.name : The SAEM omega names")
-    message(" $ model.desc : Model description")
+    cat(" $ ini       : Model initilizations/bounds object\n");
+    cat(" $ model     : Original Model\n");
+    cat(" $ nmodel    : Parsed Model List\n");
+    cat(" $ nlme.fun  : The nlme model function.\n");
+    cat(" $ nlme.specs: The nlme model specs.\n");
+    cat(" $ nlme.var  : The nlme model varaince.\n")
+    cat(" $ rxode.pred: The RxODE block with pred attached (final pred is nlmixr_pred)\n")
+    cat(" $ theta.pars: Parameters in terms of THETA[#] and ETA[#]\n")
+    cat(" $ focei.inits: Initilization for FOCEi style blocks\n")
+    cat(" $ saem.eta.trans: UI ETA -> SAEM ETA\n")
+    cat(" $ saem.model.omega: model$omega for SAEM\n")
+    cat(" $ saem.res.mod: model$res.mod for SAEM\n")
+    cat(" $ saem.ares: model$ares for SAEM\n")
+    cat(" $ saem.bres: model$bres for SAEM\n")
+    cat(" $ saem.log.eta: model$log.eta for SAEM\n")
+    cat(" $ saem.fit  : The SAEM fit user function\n")
+    cat(" $ saem.model: The SAEM model list\n")
+    cat(" $ saem.init.theta: The SAEM init$theta\n")
+    cat(" $ saem.init.omega: The SAEM init$omega\n")
+    cat(" $ saem.init : The SAEM inits list\n")
+    cat(" $ saem.theta.name : The SAEM theta names\n")
+    cat(" $ saem.omega.name : The SAEM theta names\n")
+    cat(" $ saem.res.name : The SAEM omega names\n")
+    cat(" $ model.desc : Model description\n")
+    cat(" $ .clean.dll : boolean representing if dlls are cleaned after running.\n")
 }

@@ -9,10 +9,6 @@ rxGrad <- function(rho) {
     invisible(.Call(`_nlmixr_rxGrad`, rho))
 }
 
-rxInnerNum <- function(etanews, rho) {
-    invisible(.Call(`_nlmixr_rxInnerNum`, etanews, rho))
-}
-
 rxInner <- function(etanews, rho) {
     invisible(.Call(`_nlmixr_rxInner`, etanews, rho))
 }
@@ -133,5 +129,13 @@ llik_beta <- function(y, params) {
 
 llik_neg_binomial <- function(y, params) {
     .Call(`_nlmixr_llik_neg_binomial`, y, params)
+}
+
+nlmixrParameters <- function(theta, eta) {
+    .Call(`_nlmixr_nlmixrParameters`, theta, eta)
+}
+
+nlmixrResid <- function(innerList, omegaMat, dv, etasDf, etaLst) {
+    .Call(`_nlmixr_nlmixrResid`, innerList, omegaMat, dv, etasDf, etaLst)
 }
 

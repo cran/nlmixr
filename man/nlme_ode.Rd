@@ -5,8 +5,9 @@
 \title{Fit nlme-based mixed-effect model using ODE implementation}
 \usage{
 nlme_ode(dat.o, model, par_model, par_trans, response, response.scaler = NULL,
-  transit_abs = FALSE, atol = 1e-08, rtol = 1e-08, debugODE = FALSE,
-  mc.cores = 1, ...)
+  transit_abs = FALSE, atol = 1e-06, rtol = 1e-04, maxsteps = 5000,
+  hmin = 0, hmax = NULL, hini = 0, maxordn = 12, maxords = 5,
+  debugODE = FALSE, mc.cores = 1, ...)
 }
 \arguments{
 \item{dat.o}{data to be fitted}
@@ -21,11 +22,39 @@ nlme_ode(dat.o, model, par_model, par_trans, response, response.scaler = NULL,
 
 \item{response.scaler}{optional response variable scaler. default is NULL}
 
-\item{transit_abs}{a logical if transit absorption model is enabled}
+\item{transit_abs}{boolean indicating if this is a transit
+compartment absorption}
 
-\item{atol}{atol (absolute tolerance for ODE-solver)}
+\item{atol}{a numeric absolute tolerance (1e-8 by default) used
+by the ODE solver to determine if a good solution has been
+achieved;  This is also used in the solved linear model to check
+if prior doses do not add anything to the solution.}
 
-\item{rtol}{rtol (relative tolerance for ODE-solver)}
+\item{rtol}{a numeric relative tolerance (1e-6 by default) used
+by the ODE solver to determine if a good solution has been
+achieved. This is also used in the solved linear model to check
+ if prior doses do not add anything to the solution.}
+
+\item{maxsteps}{maximum number of (internally defined) steps allowed
+during one call to the solver. (5000 by default)}
+
+\item{hmin}{The minimum absolute step size allowed. The default
+value is 0.}
+
+\item{hmax}{The maximum absolute step size allowed.  The default
+checks for the maximum difference in times in your sampling and
+events, and uses this value.  The value 0 is equivalent to
+infinite maximum absolute step size.}
+
+\item{hini}{The step size to be attempted on the first step. The
+default value is determined by the solver (when hini = 0)}
+
+\item{maxordn}{The maximum order to be allowed for the nonstiff
+(Adams) method.  The default is 12.  It can be between 1 and
+12.}
+
+\item{maxords}{The maximum order to be allowed for the stiff (BDF)
+method.  The default value is 5.  This can be between 1 and 5.}
 
 \item{debugODE}{a logical if debugging is enabled}
 
@@ -129,5 +158,5 @@ fit <- nlme_ode(dat, model=ode, par_model=specs, par_trans=mypar,
 }
 }
 \author{
-Wenping Wang
+Wenping Wang, Mathew Fidler
 }

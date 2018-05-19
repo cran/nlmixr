@@ -1,3 +1,10 @@
+regFloat1 <- rex::rex(or(group(some_of("0":"9"), ".", any_of("0":"9")),
+                         group(any_of("0":"9"), ".", some_of("0":"9"))),
+                      maybe(group(one_of("E", "e"), maybe(one_of("+", "-")), some_of("0":"9"))));
+regFloat2 <- rex::rex(some_of("0":"9"), one_of("E", "e"), maybe(one_of("-", "+")), some_of("0":"9"));
+regDecimalint <- rex::rex(or("0", group("1":"9", any_of("0":"9"))))
+regNum <- rex::rex(maybe("-"), or(regDecimalint, regFloat1, regFloat2))
+
 ##' Construct RxODE linCmt function
 ##'
 ##' @param fun function to convert to solveC syntax
@@ -75,6 +82,20 @@ VarCorr.nlmixr.ui.nlme <- function(x, sigma = 1, ...){
     VarCorr(as.nlme(x), sigma=sigma, ...)
 }
 
+use.utf <- function() {
+    opt <- getOption("cli.unicode", NULL)
+    if (! is.null(opt)) {
+        isTRUE(opt)
+    } else {
+        l10n_info()$`UTF-8` && !is.latex()
+    }
+}
+
+is.latex <- function() {
+    if (!("knitr" %in% loadedNamespaces())) return(FALSE)
+    get("is_latex_output", asNamespace("knitr"))()
+}
+
 #' Print a focei fit
 #'
 #' Print a first-order conditional non-linear mixed effect model with
@@ -86,6 +107,17 @@ VarCorr.nlmixr.ui.nlme <- function(x, sigma = 1, ...){
 #' @export
 print.focei.fit <- function(x, ...) {
     if (is.focei(x)){
+        parent <- parent.frame(2);
+        bound <- do.call("c", lapply(ls(parent), function(cur){
+            if (identical(parent[[cur]], x)){
+                return(cur)
+            }
+            return(NULL);
+        }));
+        if (length(bound) > 1) bound <- bound[1];
+        if (length(bound) == 0){
+            bound  <- ""
+        }
         env <- attr(x, ".focei.env");
         fit <- env$fit;
         args <- as.list(match.call(expand.dots = TRUE));
@@ -105,14 +137,46 @@ print.focei.fit <- function(x, ...) {
         if (is(x, "nlmixr.ui.nlme")){
             nlme <- fit$nlme;
             uif <- env$uif;
-            message(sprintf("nlmixr nlme fit by %s (%s)\n", ifelse(nlme$method == "REML", "REML", "maximum likelihood"),
-                            ifelse(is.null(uif$nmodel$lin.solved), "ODE", "Solved")));
+            if (is(nlme, "nlme.free")){
+                text <- "Free-form"
+            } else {
+                if (use.utf()){
+                    mu <- "\u03BC";
+                } else {
+                    mu <- "mu"
+                }
+                if (is(nlme, "nlme.mu")){
+                    text <- sprintf("%s-ref", mu)
+                } else if (is(nlme, "nlme.mu.cov")){
+                    text <- sprintf("%s-ref & covs", mu)
+                }
+            }
+            message(cli::rule(paste0(crayon::bold$blue("nlmix"), crayon::bold$red("r"), " ", crayon::bold$yellow("nlme"), " fit by ",
+                                     crayon::bold$yellow(ifelse(nlme$method == "REML", "REML", "maximum likelihood"))," (",
+                                     crayon::italic(paste0(ifelse(is.null(uif$nmodel$lin.solved), "ODE", "Solved"),
+                                                           "; ", text)), ")")))
         } else if (is(x, "nlmixr.ui.saem")){
             saem <- fit$saem;
             uif <- env$uif;
-            message(sprintf("nlmixr SAEM fit (%s)\n", ifelse(is.null(uif$nmodel$lin.solved), "ODE", "Solved")))
+            message(cli::rule(paste0(crayon::bold$blue("nlmix"), crayon::bold$red("r"), " ", crayon::bold$yellow("SAEM"), " fit (",
+                             crayon::italic(ifelse(is.null(uif$nmodel$lin.solved), "ODE", "Solved")), "); ",
+                             crayon::blurred$italic("OBJF calculated from FOCEi approximation"))))
         } else {
-            message(sprintf("nlmixr FOCEI fit (%s)\n", ifelse(fit$focei.control$grad, "with global gradient", "without global gradient")));
+            ## sprintf("nlmixr FOCEI fit (%s)\n", ifelse(fit$focei.control$grad, "with global gradient", "without global gradient")
+            if (use.utf()){
+                eta.name <- "\u03B7";
+            } else {
+                eta.name <- "eta"
+            }
+            type <- crayon::italic(ifelse(is.null(uif$nmodel$lin.solved), "ODE", "Solved"));
+            if (is(x, "nlmixr.ui.focei.posthoc")){
+                message(cli::rule(paste0(crayon::bold$blue("nlmix"), crayon::bold$red("r"), " ", crayon::bold$yellow("FOCEi"), " posthoc ",
+                                         eta.name, " estimation (",type, ")")))
+            } else {
+                message(cli::rule(paste0(crayon::bold$blue("nlmix"), crayon::bold$red("r"), " ", crayon::bold$yellow("FOCEi"), " fit ",
+                                         ifelse(fit$focei.control$grad, "with global gradient", "without global gradient"),
+                                         " (",type , ")")));
+            }
         }
         if (any(names(fit) == "condition.number")){
             df.objf <- data.frame(OBJF=fit$objective, AIC=AIC(x), BIC=BIC(x), "Log-likelihood"=as.numeric(logLik(x)),
@@ -123,22 +187,62 @@ print.focei.fit <- function(x, ...) {
                                   row.names="", check.names=FALSE)
         }
         if (!is.null(nlme)){
-            message("FOCEi-based goodness of fit metrics:")
+            message(paste0(crayon::bold$yellow("FOCEi"), "-based goodness of fit metrics:"))
         }
         nlmixrPrint(df.objf)
         if (!is.null(nlme)){
-            message("\nnlme-based goodness of fit metrics:")
+            message(paste0("\n",crayon::bold$yellow("nlme"), "-based goodness of fit metrics:"))
             df.objf <- data.frame(AIC=AIC(as.nlme(x)), BIC=BIC(as.nlme(x)),"Log-likelihood"=as.numeric(logLik(as.nlme(x))),
                                   row.names="", check.names=FALSE)
             nlmixrPrint(df.objf)
         }
-        message("\nTime (sec; $time):");
+        message(paste0("\n", cli::rule(paste0(crayon::bold("Time"), " (sec; ", crayon::yellow(bound), crayon::bold$blue("$time"), "):"))));
         print(fit$time);
-        message("\nParameters ($par.fixed):")
+        message(paste0("\n", cli::rule(paste0(crayon::bold("Parameters"), " (", crayon::yellow(bound), crayon::bold$blue("$par.fixed"), "):"))));
         print(x$par.fixed)
-        message("\nOmega ($omega):");
-        print(fit$omega);
-        message("\nFit Data (object is a modified data.frame):")
+        tmp <- fit$omega
+        diag(tmp) <- 0;
+        if (all(tmp == 0)){
+            message("\n  No correlations in between subject variability (BSV) matrix")
+        } else {
+            message("\n  Correlations in between subject variability (BSV) matrix:")
+            rs <- fit$omega.R
+            lt <- lower.tri(rs);
+            dn1 <- dimnames(fit$omega.R)[[2]]
+            nms <- apply(which(lt,arr.ind=TRUE),1,function(x){sprintf("R(%s)",paste(dn1[x],collapse=", "))});
+            lt <- structure(rs[lt], .Names=nms)
+            lt <- lt[lt != 0]
+            digs <- 3;
+            lts <- sapply(lt, function(x){
+                x <- abs(lt);
+                ret <- "<"
+                if (x > 0.7){
+                    ret <- ">" ## Strong
+                } else if (x > 0.3){
+                    ret <- "=" ## Moderate
+                }
+                return(ret)
+            })
+            nms <- names(lt);
+            lt <- sprintf("%s%s", formatC(signif(lt, digits=digs),digits=digs,format="fg", flag="#"), lts)
+            names(lt) <- nms;
+            lt <- gsub(rex::rex("\""), "", paste0("    ", R.utils::captureOutput(print(lt))));
+            if (crayon::has_color()){
+                lt <- gsub(rex::rex(capture(regNum), ">"), "\033[1m\033[31m\\1 \033[39m\033[22m", lt, perl=TRUE)
+                lt <- gsub(rex::rex(capture(regNum), "="), "\033[1m\033[32m\\1 \033[39m\033[22m", lt, perl=TRUE)
+                lt <- gsub(rex::rex(capture(regNum), "<"), "\\1 ", lt, perl=TRUE)
+            } else {
+                lt <- gsub(rex::rex(capture(regNum), or(">", "=", "<")), "\\1 ", lt, perl=TRUE)
+            }
+            message(paste(lt, collapse="\n"), "\n")
+        }
+        message(paste0("  Full BSV covariance (", crayon::yellow(bound), crayon::bold$blue("$omega"), ") or correlation (", crayon::yellow(bound), crayon::bold$blue("$omega.R"), "; diagonals=SDs)"));
+        message(paste0("  Distribution stats (mean/skewness/kurtosis/p-value) available in ",
+                       crayon::yellow(bound), crayon::bold$blue("$shrink")));
+
+        message(paste0("\n", cli::rule(paste0(crayon::bold("Fit Data"), " (object", ifelse(bound == "", "", " "),
+                                              crayon::yellow(bound),
+                                              " is a modified ", crayon::blue("data.frame"), "):"))))
 
         is.dplyr <- requireNamespace("dplyr", quietly = TRUE);
         if (!is.dplyr){
@@ -223,10 +327,12 @@ vcov.focei.fit <- function(object, ..., type=c("", "r.s", "s", "r")){
     fit$par.data.frame <- data.frame(est=fit$theta, se=fit$se[w], "%cv"=abs(fit$se[w] / fit$theta * 100),
                                      check.names=FALSE, row.names=nms);
     if (env$con$eigen){
-        fit$eigen <- eigen(fit$cov,TRUE,TRUE)$values;
-        tmp <- sapply(fit$eigen, abs)
-        print(tmp);
-        fit$condition.number <- max(tmp) / min(tmp);
+        eig <- try(eigen(fit$cov,TRUE,TRUE)$values, silent=TRUE);
+        if (!inherits(eig, "try-error")){
+            fit$eigen <- eig
+            tmp <- sapply(fit$eigen, abs)
+            fit$condition.number <- max(tmp) / min(tmp);
+        }
     }
     assign("fit", fit, env);
     return(fit$cov);
@@ -236,8 +342,8 @@ vcov.focei.fit <- function(object, ..., type=c("", "r.s", "s", "r")){
 ##'
 ##' @param object Fit object
 ##' @param ... other parameters
-##' @param population when true (default false), calculate the
-##'     population predictions; When false, calculate the individual
+##' @param population when true (default false), calculate/extract the
+##'     population predictions; When false, calculate/extract the individual
 ##'     predictions.
 ##'
 ##'     If this is a matrix with the number columns equal to the
@@ -246,30 +352,33 @@ vcov.focei.fit <- function(object, ..., type=c("", "r.s", "s", "r")){
 ##'     used to fit the data.
 ##' @param type The type of fitted object to be extracted.  When the
 ##'     value is "fitted", this gives the individual or population
-##'     fitted values. The "Vi" option gives the variance estimate for
-##'     the individual.  The "Vfo" gives the Variance under the fo
-##'     assumption when population=FALSE, and the FOCE assumption when
-##'     population=TRUE. "dErr_dEta" gives the df/deta*eta. When
-##'     "posthoc", this extracts the posthoc deviations from the
-##'     typical values or ETAs.
+##'     fitted values. When "posthoc", this extracts the posthoc
+##'     deviations from the typical values or ETAs.
 ##' @return Individual/population predictions
 ##' @author Matthew L. Fidler
 ##' @export
 fitted.focei.fit <- function(object, ..., population=FALSE,
-                             type=c("fitted", "Vi", "Vfo", "dErr_dEta", "dR_dEta", "posthoc")){
+                             type=c("fitted", "posthoc")){
+    type <- match.arg(type);
+    if (type == "fitted"){
+        if (population){
+            return(object$CPRED);
+        } else {
+            return(object$PRED);
+        }
+    }
     env <- attr(object, ".focei.env");
     fit <- env$fit;
-    type <- match.arg(type);
+    if (is(population, "logical")){
+        tmp <- fit$etas.df
+        if (!is.null(tmp)){
+            return(tmp)
+        }
+    }
     ofv.FOCEi <- env$ofv.FOCEi;
     dat <- object
     env <- environment(ofv.FOCEi);
-    if (class(population) == "logical"){
-        if (population && type != "posthoc"){
-            old.mat <- env$inits.mat
-            assign("inits.mat", matrix(0, env$nSUB, env$nETA), env)
-            on.exit({assign("inits.mat", old.mat, env)});
-        }
-    } else if (class(population) == "matrix"){
+    if (class(population) == "matrix"){
         if (nrow(population) == env$nSUB && ncol(population) == env$nETA){
             old.mat <- env$inits.mat
             assign("inits.mat", population, env)
@@ -295,8 +404,6 @@ fitted.focei.fit <- function(object, ..., population=FALSE,
         }
         d1 <- data.frame(ID=unique(object$ID), d1)
         return(d1)
-    } else {
-        return(unlist(lapply(attr(x,"subj"), function(s) attr(s, type))))
     }
 }
 
@@ -347,6 +454,7 @@ fixef.focei.fit <- function(object, ...){
                 lab <- gsub(" *$", "", gsub("^ *", "", lab));
                 if (!is.null(nlme)){
                     ttab <- data.frame(summary(nlme)$tTable);
+                    row.names(ttab) <- fix.nlme.names(row.names(ttab), uif);
                     names(ttab) <- c("Estimate", "SE", "DF", "t-value", "p-value")
                     ttab <- ttab[, 1:2]
                     tmp <- object$par.data.frame;
@@ -363,27 +471,89 @@ fixef.focei.fit <- function(object, ...){
                     }
                     df <- data.frame(Parameter=lab, df);
                 }
-                if (!is.null(saem) | !is.null(nlme)){
+                if (!is.null(saem) || !is.null(nlme)){
                     df <- data.frame(df, "CV"=abs(df$SE / df$Estimate * 100));
                 } else {
                     df <- object$par.data.frame;
                     df <- data.frame(Parameter=lab, df)
                 }
+
                 df <- data.frame(df, Untransformed=df$Estimate,
                                  Lower.ci=df$Estimate - qn * df$SE,
                                  Upper.ci=df$Estimate + qn * df$SE,
                                  check.names=FALSE);
+                ## Now get the ETA information
+                mu.ref <- unlist(uif$mu.ref);
+                if (length(mu.ref) > 0){
+                    n.mu.ref <- names(mu.ref)
+                    ome <- object$omega
+                    mu.ref <- structure(as.vector(n.mu.ref), .Names=as.vector(mu.ref));
+                    log.eta <- uif$log.eta;
+                    digs <- 3;
+                    cvp <- sapply(row.names(df), function(x){
+                        y <- mu.ref[x];
+                        if (is.na(y)) return(" ");
+                        v <- ome[y, y];
+                        if (any(y == log.eta)){
+                            sprintf("%s%%", formatC(signif(sqrt(exp(v) - 1) * 100, digits=digs),digits=digs,format="fg", flag="#"));
+                        } else {
+                            sprintf("%s", formatC(signif(sqrt(v),digits=digs), digits=digs,format="fg", flag="#"))
+                        }
+                    })
+                    shrink <- object$shrink;
+                    errs <- as.data.frame(uif$ini);
+                    errs <- paste(errs[which(!is.na(errs$err)), "name"]);
+                    sh <- sapply(row.names(df), function(x){
+                        y <- mu.ref[x];
+                        if (is.na(y)) {
+                            if (any(x == errs)){
+                                v <- shrink[7, "IWRES"];
+                                if (is.na(v)){
+                                    return(" ")
+                                }
+                            } else {
+                                return(" ")
+                            }
+                        } else {
+                            v <- shrink[7, y];
+                        }
+                        t <- ">"
+                        if (v < 0){
+                        } else  if (v < 20){
+                            t <- "<"
+                        } else if (v < 30){
+                            t <- "="
+                        }
+                        sprintf("%s%%%s", formatC(signif(v, digits=digs),digits=digs,format="fg", flag="#"), t);
+                    })
+                    df <- data.frame(df, BSV.cv.sd=cvp, "Shrink(SD)%"=sh, check.names=FALSE);
+                }
+                if (!is(object, "nlmixr.ui.focei.posthoc")){
+                    df <- data.frame(df,
+                                     Lower.ci=df$Estimate - qn * df$SE,
+                                     Upper.ci=df$Estimate + qn * df$SE,
+                                     check.names=FALSE);
+
+                }
                 log.theta <- which(row.names(df) %in% uif$log.theta);
                 if (length(log.theta) > 0){
                     df$Untransformed[log.theta] <- exp(df$Untransformed[log.theta])
-                    df$Lower.ci[log.theta] <- exp(df$Lower.ci[log.theta])
-                    df$Upper.ci[log.theta] <- exp(df$Upper.ci[log.theta])
+                    if (!is(object, "nlmixr.ui.focei.posthoc")){
+                        df$Lower.ci[log.theta] <- exp(df$Lower.ci[log.theta])
+                        df$Upper.ci[log.theta] <- exp(df$Upper.ci[log.theta])
+                    }
                 }
                 w <- which(uif$ini$err == "prop")
                 if (length(w) > 0){
-                    df$Untransformed[w] <- df$Untransformed[w] * 100
-                    df$Lower.ci[w] <- df$Lower.ci[w] * 100
-                    df$Upper.ci[w] <- df$Upper.ci[w] * 100
+                    name <- uif$ini$name[w];
+                    w <- which(row.names(df) %in% name);
+                    if (length(w) > 0){
+                        df$Untransformed[w] <- df$Untransformed[w] * 100
+                        if (!is(object, "nlmixr.ui.focei.posthoc")){
+                            df$Lower.ci[w] <- df$Lower.ci[w] * 100
+                            df$Upper.ci[w] <- df$Upper.ci[w] * 100
+                        }
+                    }
                 }
                 attr(df, "ci") <- ci;
                 class(df) <- c("nlmixr.par.fixed", "data.frame");
@@ -408,18 +578,33 @@ print.nlmixr.par.fixed <- function(x, ...){
     FFP<-function(x,digits){ifelse(is.na(x), " ",
                                    paste0(formatC(x,digits=digits,format="f",flag="#"), "%"))}
     df$Estimate <- F2(df$Estimate, digs);
-    df$SE <- F2(df$SE, digs);
-    df$CV <- paste0(FFP(df$CV, digs.cv))
-
-    df$Untransformed <- sprintf("%s%s", F2(df$Untransformed, digs),
-                                ifelse(x$Estimate * 100 == x$Untransformed, "%", ""));
+    if (is(x, "nlmixr.ui.focei.posthoc")){
+        df$SE <- F2(df$SE, digs);
+        df$CV <- paste0(FFP(df$CV, digs.cv))
+    }
     ci <- attr(x, "ci")
-    df[, sprintf("(%s%%CI)", ci * 100)] <- sprintf("%s%s%s%s%s",
-                                                   ifelse(is.na(df$Lower.ci) | is.na(df$Lower.ci), "", "("),
-                                                   F2(df$Lower.ci, digs),
-                                                   ifelse(is.na(df$Lower.ci) | is.na(df$Lower.ci), "", ", "),
-                                                   F2(df$Upper.ci, digs),
-                                                   ifelse(is.na(df$Lower.ci) | is.na(df$Lower.ci), "", ")"));
+    df$Untransformed <- sprintf("%s%s %s%s%s%s%s", F2(df$Untransformed, digs),
+                                ifelse(x$Estimate * 100 == x$Untransformed, "%", ""),
+                                ifelse(is.na(df$Lower.ci) | is.na(df$Lower.ci), "", "("),
+                                F2(df$Lower.ci, digs),
+                                ifelse(is.na(df$Lower.ci) | is.na(df$Lower.ci), "", ", "),
+                                F2(df$Upper.ci, digs),
+                                ifelse(is.na(df$Lower.ci) | is.na(df$Lower.ci), "", ")"));
+    df$CV <- gsub("NA", "", sprintf("%s", F2(df$CV, digs)));
+    names(df) <- gsub("CV", "%RSE", names(df))
+    names(df) <- gsub("Untransformed", sprintf("Back-transformed(%s%%CI)", ci * 100), names(df))
+    if (any(names(df) == "BSV.cv.sd")){
+        tmp <- df$BSV.cv.sd
+        tmp <- tmp[tmp != " "];
+        if (all(regexpr(rex::rex("%", end), tmp) != -1)){
+            names(df) <- gsub("BSV.cv.sd", "BSV(CV%)", names(df));
+        } else if (all(regexpr(rex::rex("%", end), tmp) == -1)){
+            names(df) <- gsub("BSV.cv.sd", "BSV(SD)", names(df));
+        } else {
+            names(df) <- gsub("BSV.cv.sd", "BSV(CV% or SD)", names(df));
+        }
+    }
+    df$SE <- gsub("NA", "", sprintf("%s", F2(df$SE, digs)));
     df <- df[, regexpr("[.]ci", names(df)) == -1]
     if (all(df$Parameter == "")){
         df <- df[, -1];
@@ -430,7 +615,18 @@ print.nlmixr.par.fixed <- function(x, ...){
             df$Parameter[w] <- row.names(df)[w];
         }
     }
-    print(df)
+    pdf <- R.utils::captureOutput(print(df));
+    if (crayon::has_color()){
+        pdf <- gsub(rex::rex(capture(regNum), "%>"), "\033[1m\033[31m\\1%\033[39m\033[22m ", pdf, perl=TRUE)
+        pdf <- gsub(rex::rex(capture(regNum), "%="), "\033[1m\033[32m\\1%\033[39m\033[22m ", pdf, perl=TRUE)
+        pdf <- gsub(rex::rex(capture(regNum), "%<"), "\\1% ", pdf, perl=TRUE)
+        pdf <- gsub(rex::rex(capture(or(c(row.names(df), names(df))))), "\033[1m\\1\033[22m", pdf, perl=TRUE);
+    } else {
+        pdf <- gsub(rex::rex(capture(regNum), "%", or(">", "=", "<")), "\\1% ", pdf, perl=TRUE)
+    }
+    pdf <- paste(pdf, collapse="\n");
+    message(pdf)
+    return(invisible(df))
 }
 
 ##'@export
@@ -449,73 +645,11 @@ print.nlmixr.shrink <- function(x, ...){
 ##' @param object focei.fit object
 ##' @param ... Additional arguments
 ##' @param type Residuals type fitted.
-##' @param etas ETAs matrix to use for the calculation.
 ##' @return residuals
 ##' @author Matthew L. Fidler
 ##' @export
-residuals.focei.fit <- function(object, ..., type=c("ires", "res", "iwres", "wres", "cwres", "cpred", "cres"),
-                                etas=NULL){
-    env <- attr(object, ".focei.env");
-    if (!is.null(etas)){
-        if (class(etas) == "matrix" && nrow(etas) == env$nSUB && ncol(etas) == env$nETA){
-            old.mat <- env$inits.mat
-            assign("inits.mat", etas, env)
-            on.exit({assign("inits.mat", old.mat, env)});
-        } else {
-            stop(sprintf("The matrix of etas specified by etas needs to be %s rows by %s columns", env$nSUB, env$nETA))
-        }
-    }
-    dat <- object;
-    DV <- dat$DV;
-    type <- match.arg(type);
-    ## up.type <- toupper(type)
-    ## if (any(up.type == names(object))){
-    ##     return(dat[, ]);
-    ## }
-    if (any(type == c("res", "wres", "cwres", "cres", "cpred", "cpredi"))){
-        ## population=TRUE => eta=0
-        if (type == "wres"){
-            ## Efo= f(|eta=0)
-            ## cov = Vfo|eta=0+Vi|eta=0
-            ## These WRES are calculated the same as Hooker 2007, but don't seem to match NONMEM.
-            pred <- fitted(object, population=TRUE)
-            ## In theory the decorrelation is done by eigenvector decomposition. However, it doens't seem to affect the WRES values.
-            ## W <- fitted(object, population=TRUE, type="Vfo") + fitted(object, population=TRUE, type="Vi")
-            ## tmp <- aggregate(W,by=list(object$ID),FUN=function(x){e <- eigen(diag(x)); return(diag(e$vectors %*% diag(sqrt(e$values)) %*% rxInv(e$vectors)))});
-            ## tmp <- data.frame(ID=tmp[,1],stack(data.frame(tmp[,-1])));
-            ## tmp <- tmp[order(tmp$ID,tmp$ind),];
-            ## tmp <- sqrt(tmp$values)
-            ## Even though it does not match NONMEM, it should be adequate metric for WRES...
-            W <- fitted(object, population=TRUE, type="Vfo") + fitted(object, population=TRUE, type="Vi")
-            return((DV - pred) / sqrt(W));
-        } else if (type == "cwres"){
-            ## According to Hooker 2007, the Vi (or the
-            ## dh/deta*Sigma*dh/deta) should be calculated under eta=0
-            ## conditions.  However, I don't think this is correct;
-            ## Neither does NONMEM; They use Vi under the post-hoc
-            ## predicted conditions
-            pred <- fitted(object, population=FALSE) - fitted(object, population=FALSE, type="dErr_dEta");
-            W <- sqrt(fitted(object, population=FALSE, type="Vfo") + fitted(object, population=FALSE, type="Vi"))
-            return((DV - pred) / W);
-        } else if (type == "cpred"){
-            pred <- fitted(object, population=FALSE) - fitted(object, population=FALSE, type="dErr_dEta");
-            return(pred);
-        } else if (type == "cres"){
-            pred <- fitted(object, population=FALSE) - fitted(object, population=FALSE, type="dErr_dEta");
-            return(DV - pred);
-        } else {
-            pred <- fitted(object, population=TRUE);
-            return(DV - pred);
-        }
-    } else if (any(type == c("ires", "iwres"))){
-        ipred <- fitted(object, population=FALSE);
-        if (type == "iwres"){
-            W <- sqrt(fitted(object, population=FALSE, type="Vi"));
-            return((DV - ipred) / W);
-        } else {
-            return(DV - ipred);
-        }
-    }
+residuals.focei.fit <- function(object, ..., type=c("ires", "res", "iwres", "wres", "cwres", "cpred", "cres")){
+    return(object[, toupper(match.arg(type))]);
 }
 ##' Convert focei fit to a data.frame
 ##'
@@ -538,31 +672,6 @@ as.data.frame.focei.fit <- function(x, row.names = NULL, optional = FALSE, ...){
 
 ## FIXME: simulate function
 
-##' Simulate response based on FOCEi model's datathe fitted object's dataset
-##'
-##' @param object Focei object
-##' @param nsim Number of simulated parameters
-##' @param seed Seed to start with (if specified)
-##' @param ... Other parameters
-##' @return New dataset based on original dataset
-##' @export
-##' @author Matthew L. Fidler
-simulate.focei.fit <- function(object, nsim=1, seed=NULL, ...){
-    if(!is.null(seed)){
-        set.seed(seed);
-    }
-    nsub <- length(unique(object$ID));
-    nobs <- length(object$ID);
-    do.call("rbind",
-            lapply(seq(1, nsim),
-                   function(x){
-                eta.mat <- mvtnorm::rmvnorm(nsub, sigma = object$omega, ...)
-                ipred <- fitted(object, population=eta.mat);
-                dv <- ipred + sapply(fitted(object, population=eta.mat, type="Vi"),
-                                     function(r){ return(rnorm(1, sd=sqrt(r)))});
-                return(data.frame(SIMID=x, ID=object$ID, TIME=object$TIME, DV=dv, IPRED=ipred))
-            }))
-}
 ## FIXME: show?
 ## FIXME: qqnorm?
 ## FIXME: family?
@@ -703,6 +812,12 @@ plot.focei.fit <- function(x, ...) {
         geom_abline(slope=0, intercept=0, col="red")
     print(p2)
 
+    p2 <- ggplot(dat, aes(x=TIME, y=IRES)) +
+        geom_point() +
+        geom_abline(slope=0, intercept=0, col="red")
+    print(p2)
+
+
     ids <- unique(dat$ID)
     for (i  in seq(1, length(ids), by=16)){
         tmp <- ids[seq(i, i + 15)]
@@ -736,8 +851,6 @@ plot.focei.fit <- function(x, ...) {
 ##' @param lower Lower bounds
 ##' @param upper Upper Bounds
 ##' @param control Control list
-##' @param calculate.vars is a list of variables that will be
-##'     calculated after the FOCEI estimation is complete.
 ##' @param theta.names Names of the thetas to be used in the final object
 ##' @param eta.names Eta names to be used in the final object
 ##' @param ... Ignored parameters
@@ -754,7 +867,6 @@ focei.fit <- function(data,
                       lower= -Inf,
                       upper= Inf,
                       control=list(),
-                      calculate.vars=c("pred", "ipred", "ires", "res", "iwres", "wres", "cwres", "cpred", "cres"),
                       theta.names=NULL,
                       eta.names=NULL,
                       ...){
@@ -821,9 +933,9 @@ focei.fit.data.frame0 <- function(data,
                                   lower= -Inf,
                                   upper= Inf,
                                   control=list(),
-                                  calculate.vars=c("pred", "ipred", "ires", "res", "iwres", "wres", "cwres", "cpred", "cres"),
                                   theta.names=NULL,
                                   eta.names=NULL){
+
     orig.data <- data;
     do.table <- FALSE;
     sink.file <- tempfile();
@@ -880,6 +992,13 @@ focei.fit.data.frame0 <- function(data,
         trace = 0,
         atol.ode=1e-6,
         rtol.ode=1e-6,
+        hmin = 0L,
+        hmax = NULL,
+        hini = 0L,
+        transit_abs = NULL,
+        maxordn = 12L,
+        maxords = 5L,
+        stiff=1L,
         atol.outer=1e-6,
         rtol.outer=1e-6,
         maxsteps.ode = 99999,
@@ -921,7 +1040,6 @@ focei.fit.data.frame0 <- function(data,
         sum.prod=TRUE,
         theta.grad=FALSE,
         scale.to=1,
-        numeric=FALSE,
         optim="L-BFGS-B"
     )
 
@@ -931,6 +1049,9 @@ focei.fit.data.frame0 <- function(data,
 
     pt <- proc.time()
     nmsC <- names(con)
+    if (length(control) > 0){
+        control <- control[sapply(names(control), function(x){!is.null(control[[x]])})]
+    }
     con[(namc <- names(control))] <- control
     if (length(noNms <- namc[!namc %in% nmsC]))
         warning("unknown names in control: ", paste(noNms, collapse = ", "))
@@ -956,7 +1077,7 @@ focei.fit.data.frame0 <- function(data,
                                          "bobyqa",
                                          "L-BFGS-B",
                                          "BFGS",
-                                         "lbfgs",
+                                         ## "lbfgs",
                                          "lbfgsb3",
                                          ## "newuoa",
                                          "nlminb"##,
@@ -999,14 +1120,11 @@ focei.fit.data.frame0 <- function(data,
     ## print(th0.om)
     model <- RxODE::rxSymPySetupPred(model, pred, PKpars, err, grad=con$grad,
                                      pred.minus.dv=con$pred.minus.dv, sum.prod=con$sum.prod,
-                                     theta.derivs=con$theta.grad, run.internal=TRUE,
-                                     only.numeric=con$numeric);
+                                     theta.derivs=con$theta.grad, run.internal=TRUE);
     ## rxCat(model$inner);
     if (!con$NOTRUN){
         message(sprintf("Original Compartments=%s", length(RxODE::rxState(model$obj))))
-        if (!con$numeric){
-            message(sprintf("\t Inner Compartments=%s", length(RxODE::rxState(model$inner))))
-        }
+        message(sprintf("\t Inner Compartments=%s", length(RxODE::rxState(model$inner))))
         if (con$grad){
             message(sprintf("\t Outer Compartments=%s", length(RxODE::rxState(model$outer))))
         }
@@ -1170,87 +1288,87 @@ focei.fit.data.frame0 <- function(data,
     find.best.eta <- con$find.best.eta;
     first <- TRUE
 
-    ofv.FOCEi.ind.slow <- function(pars) {
-        cur.diff <<- NULL;
-        if(con$PRINT.PARS) print(pars)
-        ## initial parameters are scale.to which translates to scale.to * inits.vec / scale.to = inits.vecs
-        if (!is.null(con$scale.to)){
-            pars <- pars * inits.vec / con$scale.to
-        }
-        if (!is.null(last.pars) && con$accept.eta.size != 0 && find.best.eta && con$grad){
-            inits.mat.bak <- inits.mat;
-            inits.mat <- rxUpdateEtas(last.dEta.dTheta, matrix(pars - last.pars, ncol=1), inits.mat,con$accept.eta.size);
-        } else {
-            inits.mat.bak <- NULL;
-        }
-        ## last.pars
-        THETA <- pars[w.th];
-        rxSymEnv <-  RxODE::rxSymInv(rxSym, pars[w.om]);
-        llik.one <- function(subj, con){
-            ev <- RxODE::eventTable()
-            dati <- data.sav[data.sav$id==subj, ]
-            if (length(cov.names) > 0){
-                cur.cov <- dati[, cov.names, drop = FALSE];
-            } else {
-                cur.cov <- NULL;
-            }
-            ev$import.EventTable(dati)
-            .wh = ID.ord[as.character(subj)]
-            if(con$DEBUG>10 && .wh==1) print(inits.mat[.wh,, drop = FALSE])               #FIXME
-            if (con$DEBUG.ODE) print("i'm here :)")
-            c.hess <- NULL;
-            if (con$save.curve && !first && con$inner.opt == "n1qn1") c.hess <- inits.c.hess[.wh, ];
-            args <- list(model, ev, theta=THETA, eta=inits.mat[.wh,, drop = FALSE], c.hess=c.hess,
-                         dv=dati$dv[ev$get.obs.rec()], inv.env=rxSymEnv,
-                         nonmem=con$NONMEM, invisible=1-con$TRACE.INNER, epsilon=con$TOL.INNER,
-                         id=subj, inits.vec=inits.vec, cov=cur.cov, estimate=find.best.eta,
-                         atol=con$atol.ode, rtol=con$rtol.ode, maxsteps=con$maxsteps.ode,
-                         atol.outer=con$atol.outer, rtol.outer=con$rtol.outer,
-                         pred.minus.dv=con$pred.minus.dv, switch.solver=con$switch.solver,
-                         numeric=con$numeric,
-                         inner.opt=con$inner.opt, add.grad=print.grad, numDeriv.method=numDeriv.method,
-                         table=do.table);
-            if (!is.null(con$scale.to)){
-                args$scale.to <- con$scale.to
-            }
-            ##method=numDeriv.method
-            if (!is.null(inits.mat.bak)){
-                args$eta.bak=inits.mat.bak[.wh, ];
-            }
-            ret <- do.call(getFromNamespace("rxFoceiInner","nlmixr"), args)
-            attr(ret, "wh") <- .wh; ## FIXME move to C?
-            return(ret)
-        }
-        ##------------------------------
-        ## parallelize
-        if (con$cores > 1){
-            if (.Platform$OS.type != "windows") {
-                llik.subj <- parallel::mclapply(X = ID.all, FUN = llik.one, mc.cores = con$cores, con=con)
-            } else {
-                llik.subj <- parallel::parLapply(cl, X = ID.all, fun = llik.one, con=con)
-            }
-        } else {
-            llik.subj <- lapply(ID.all, llik.one, con=con);
-        }
-        ## Use wenping's solution for inits.mat
-        m = t(sapply(llik.subj, function(x) {
-            c(attr(x, "wh"), attr(x, "posthoc"))
-        }))
-        if(con$RESET.INITS.MAT) inits.mat[m[,1],] <<- m[,-1]
-        ## Save last curvature
-        if (con$save.curve && con$inner.opt == "n1qn1" && !is.null(attr(llik.subj[[1]], "c.hess"))){
-            m <- t(sapply(llik.subj, function(x){
-                c(attr(x, "wh"), attr(x, "c.hess"))
-            }))
-            inits.c.hess[m[,1],] <<- m[,-1]
-        }
-        if (con$grad && con$accept.eta.size != 0){
-            last.pars <<- pars;
-            last.dEta.dTheta <<- lapply(llik.subj, function(x){attr(x, "dEta.dTheta")});
-        }
-        llik.subj
-    }
-    ofv.FOCEi.ind <- memoise::memoise(ofv.FOCEi.ind.slow)
+    ofv.FOCEi.ind <- memoise::memoise(function(pars) {
+                                      cur.diff <<- NULL;
+                                      if(con$PRINT.PARS) print(pars)
+                                      ## initial parameters are scale.to which translates to scale.to * inits.vec / scale.to = inits.vecs
+                                      if (!is.null(con$scale.to)){
+                                          pars <- pars * inits.vec / con$scale.to
+                                      }
+                                      if (!is.null(last.pars) && con$accept.eta.size != 0 && find.best.eta && con$grad){
+                                          inits.mat.bak <- inits.mat;
+                                          inits.mat <- rxUpdateEtas(last.dEta.dTheta, matrix(pars - last.pars, ncol=1), inits.mat,con$accept.eta.size);
+                                      } else {
+                                          inits.mat.bak <- NULL;
+                                      }
+                                      ## last.pars
+                                      THETA <- pars[w.th];
+                                      rxSymEnv <-  RxODE::rxSymInv(rxSym, pars[w.om]);
+                                      llik.one <- function(subj, con){
+                                          ev <- RxODE::eventTable()
+                                          dati <- data.sav[data.sav$id==subj, ]
+                                          if (length(cov.names) > 0){
+                                              cur.cov <- dati[, cov.names, drop = FALSE];
+                                          } else {
+                                              cur.cov <- NULL;
+                                          }
+                                          ev$import.EventTable(dati)
+                                          .wh = ID.ord[as.character(subj)]
+                                          if(con$DEBUG>10 && .wh==1) print(inits.mat[.wh,, drop = FALSE])               #FIXME
+                                          if (con$DEBUG.ODE) print("i'm here :)")
+                                          c.hess <- NULL;
+                                          if (con$save.curve && !first && con$inner.opt == "n1qn1") c.hess <- inits.c.hess[.wh, ];
+                                          args <- list(model, ev, theta=THETA, eta=inits.mat[.wh,, drop = FALSE], c.hess=c.hess,
+                                                       dv=dati$dv[ev$get.obs.rec()], inv.env=rxSymEnv,
+                                                       nonmem=con$NONMEM, invisible=1-con$TRACE.INNER, epsilon=con$TOL.INNER,
+                                                       id=subj, inits.vec=inits.vec, cov=cur.cov, estimate=find.best.eta,
+                                                       atol=con$atol.ode, rtol=con$rtol.ode, maxsteps=con$maxsteps.ode,
+                                                       atol.outer=con$atol.outer, rtol.outer=con$rtol.outer,
+                                                       hmin = con$hmin, hmax = con$hmax, hini = con$hini, transit_abs = con$transit_abs,
+                                                       maxordn = con$maxordn, maxords = con$maxords, stiff=con$stiff,
+                                                       pred.minus.dv=con$pred.minus.dv, switch.solver=con$switch.solver,
+                                                       inner.opt=con$inner.opt, add.grad=print.grad, numDeriv.method=numDeriv.method,
+                                                       table=do.table);
+                                          if (!is.null(con$scale.to)){
+                                              args$scale.to <- con$scale.to
+                                          }
+                                          ##method=numDeriv.method
+                                          if (!is.null(inits.mat.bak)){
+                                              args$eta.bak=inits.mat.bak[.wh, ];
+                                          }
+                                          ret <- do.call(getFromNamespace("rxFoceiInner","nlmixr"), args)
+                                          attr(ret, "wh") <- .wh; ## FIXME move to C?
+                                          return(ret)
+                                      }
+                                      ##------------------------------
+                                      ## parallelize
+                                      if (con$cores > 1){
+                                          if (.Platform$OS.type != "windows") {
+                                              llik.subj <- parallel::mclapply(X = ID.all, FUN = llik.one, mc.cores = con$cores, con=con)
+                                          } else {
+                                              llik.subj <- parallel::parLapply(cl, X = ID.all, fun = llik.one, con=con)
+                                          }
+                                      } else {
+                                          llik.subj <- lapply(ID.all, llik.one, con=con);
+                                      }
+                                      ## Use wenping's solution for inits.mat
+                                      m = t(sapply(llik.subj, function(x) {
+                                          c(attr(x, "wh"), attr(x, "posthoc"))
+                                      }))
+                                      if(con$RESET.INITS.MAT) inits.mat[m[,1],] <<- m[,-1]
+                                      ## Save last curvature
+                                      if (con$save.curve && con$inner.opt == "n1qn1" && !is.null(attr(llik.subj[[1]], "c.hess"))){
+                                          m <- t(sapply(llik.subj, function(x){
+                                              c(attr(x, "wh"), attr(x, "c.hess"))
+                                          }))
+                                          inits.c.hess[m[,1],] <<- m[,-1]
+                                      }
+                                      if (con$grad && con$accept.eta.size != 0){
+                                          last.pars <<- pars;
+                                          last.dEta.dTheta <<- lapply(llik.subj, function(x){attr(x, "dEta.dTheta")});
+                                      }
+                                      llik.subj
+                                  })
 
     ofv.FOCEi.vec = function(pars) {
         llik.subj = ofv.FOCEi.ind(pars)
@@ -1285,9 +1403,10 @@ focei.fit.data.frame0 <- function(data,
     optim.obj <- function(lines, prefix="o"){
         if (class(lines) == "numeric"){
             ofv <- lines;
-            if (any(optim.method == c("lbfgs"))){
-                return(paste0(prefix, ".", RxODE::rxCout(ofv)));
-            } else if (any(optim.method == c("L-BFGS-B", "BFGS"))){
+            ## if (any(optim.method == c("lbfgs"))){
+            ##     return(paste0(prefix, ".", RxODE::rxCout(ofv)));
+            ## } else
+            if (any(optim.method == c("L-BFGS-B", "BFGS"))){
                 return(sprintf("%s.%.6f", prefix, ofv))
             } else if (any(optim.method == c("nlminb", "newuoa", "bobyqa", "uobyqa", "n1qn1"))){
                 return(paste0(prefix, ".", gsub("^ *", "", sprintf("%#14.8g",ofv))));
@@ -2015,10 +2134,18 @@ focei.fit.data.frame0 <- function(data,
         lD <- fit$par.unscaled[-seq_along(nms)];
         rxSymEnv <-  RxODE::rxSymInv(rxSym, lD);
         fit$omega <- rxSymEnv$omega;
+        d <- sqrt(diag(fit$omega))
+        d1 <- d;
+        d <- RxODE::rxInv(diag(length(d)) * d);
+        omega.r <- d %*% fit$omega %*% d;
+        diag(omega.r) <- d1;
+
         if (length(eta.names) == dim(fit$omega)[1]){
             dimnames(fit$omega) <- list(eta.names, eta.names);
             fit$eta.names <- eta.names;
+            dimnames(omega.r) <- dimnames(fit$omega)
         }
+        fit$omega.R <- omega.r
         fit$fit.df <- fit.df;
         w <- seq_along(nms)
         if (con$NOTRUN){
@@ -2036,64 +2163,20 @@ focei.fit.data.frame0 <- function(data,
     memoise::forget(ofv.FOCEi.ind);
     ## Allow IPRED/PRED to be calculated by taking out the caching
     ## (which is per-parameter, not per parameter and eta)
-    ofv.FOCEi.ind <- ofv.FOCEi.ind.slow;
+    ## ofv.FOCEi.ind <- ofv.FOCEi.ind.slow;
     running <- FALSE;
     sink.close()
     con$cores <- 1; ## don't run parallel for extracting information
     find.best.eta <- FALSE;
     print.grad <- FALSE; ## Turn off slow gradient calculation
-    old.model <- model;
-    model$theta <- NULL;
-    model$outer <- NULL;
     do.table <- TRUE
     message("Calculating Table Variables...")
     tmp <- c()
     pt <- proc.time();
-    if (any("ipred" == calculate.vars)){
-        ## message("\tIPRED", appendLF=FALSE)
-        data$IPRED <- fitted(data, population=FALSE);
-        calculate.vars <- calculate.vars[calculate.vars != "ipred"];
-        ## message("done.")
-    }
-    if (any("pred" == calculate.vars)){
-        ## message("\tPRED", appendLF=FALSE)
-        data$PRED <- fitted(data, population=TRUE)
-        calculate.vars <- calculate.vars[calculate.vars != "pred"];
-        ## message("done.")
-    }
-    fit$eps.shrink <- NA
-    fit$eta.shrink <- NA
-    for (v in calculate.vars){
-        if (v != "pred"){
-            ## message(sprintf("\t%s", v), appendLF=FALSE)
-            data[, toupper(v)] <- resid(data, type=v);
-            ## message("done.")
-            if (v == "iwres"){
-                ## Now add shrinkages.
-                fit$eps.shrink <- structure((1 - stats::sd(data$IWRES)) * 100, .Names="eps", class="nlmixr.shrink");
-            }
-        }
-    }
-    if (con$add.posthoc){
-        etas <- fitted(data, type="posthoc")
-        data <- merge(data, etas);
-        ## Drops the class/environment; Put back in.
-        attr(data, ".focei.env") <- env;
-        class(data) <- c("focei.fit", "data.frame")
-        ## Adapted
-        om <- diag(fit$omega)
-        d <- etas[,-1]
-        eshr <- sapply(seq_along(om), function(i){
-            return((1 - (stats::sd(d[,i]) / sqrt(om[i])))*100);
-        })
-        names(eshr) <- names(d);
-        class(eshr) <- "nlmixr.shrink"
-        fit$eta.shrink <- eshr;
-    }
-
-
-    ## FIXME -- add lhs/state variables to the data-frame.
-    ## data <- merge(data, m);
+    res <- calc.resid.fit(data, orig.data, con);
+    fit$shrink <- res[[2]];
+    fit$con <- con;
+    data <- cbind(as.data.frame(data), res[[1]], res[[3]], res[[4]]);
     table.time <- proc.time() - pt;
     fit$table.time <- table.time;
     fit$data.names <- names(data);
@@ -2103,9 +2186,10 @@ focei.fit.data.frame0 <- function(data,
                            covariance=fit$cov.time["elapsed"],
                            table=fit$table.time["elapsed"],
                            row.names="");
-    model <- old.model;
     fit$model <- model;
     message("done")
+    attr(data, ".focei.env") <- env
+    class(data) <- c("focei.fit", "data.frame")
     data
 }
 
@@ -2142,9 +2226,10 @@ focei.fit.data.frame0 <- function(data,
             if (is.null(ret)){
                 if (exists(arg, env, inherits=FALSE)){
                     return(get(arg, env, inherits=FALSE));
-                } else if (exists(arg, env$uif$env, inherits=FALSE)){
-                    return(get(arg, env$uif$env, inherits=FALSE));
-                } else {
+                } ## else if (exists(arg, env$uif$env, inherits=FALSE)){
+                ##     return(get(arg, env$uif$env, inherits=FALSE));
+                ## }
+                else {
                     return(NULL)
                 }
             } else {
@@ -2161,9 +2246,9 @@ focei.fit.data.frame0 <- function(data,
 str.focei.fit <- function(object, ...){
     uif <- object$uif;
     if (is.null(uif)){
-        message('FOCEi combined dataset and properties');
+        cat('FOCEi combined dataset and properties\n');
     } else {
-        message('nlmixr UI combined dataset and properties')
+        cat('nlmixr UI combined dataset and properties\n')
     }
     m <- as.data.frame(object);
     str(m)
@@ -2172,13 +2257,13 @@ str.focei.fit <- function(object, ...){
     str(fit)
     str(as.list(env$fit))
     str(as.list(object$uif$env))
-    message(" $ par.hist         : Parameter history (if available)")
-    message(" $ par.hist.stacked : Parameter history in stacked form for easy plotting (if available)")
-    message(" $ par.fixed        : Fixed Effect Parameter Table")
-    message(" $ eta              : Individual Parameter Estimates")
-    message(" $ seed             : Seed (if applicable)");
-    message(" $ model.name       : Model name (from R function)");
-    message(" $ data.name        : Name of R data input");
+    cat(" $ par.hist         : Parameter history (if available)\n")
+    cat(" $ par.hist.stacked : Parameter history in stacked form for easy plotting (if available)\n")
+    cat(" $ par.fixed        : Fixed Effect Parameter Table\n")
+    cat(" $ eta              : Individual Parameter Estimates\n")
+    cat(" $ seed             : Seed (if applicable)\n");
+    cat(" $ model.name       : Model name (from R function)\n");
+    cat(" $ data.name        : Name of R data input\n");
 }
 
 ##' @export
@@ -2404,6 +2489,18 @@ print.anova.nlmixr <- function (x, verbose = attr(x, "verbose"), ...)
         print(as.data.frame(x), ...)
     }
     invisible(ox)
+}
+
+focei.cleanup <- function(obj){
+    if (is(obj, "focei.fit")){
+        model <- obj$model
+        for (m in c("ebe", "pred.only", "inner", "outer")){
+            if (is(model[[m]], "RxODE")) {RxODE::rxUnload(model[[m]])}
+        }
+        if (file.exists(model$cache.file)){
+            unlink(model$cache.file)
+        }
+    }
 }
 
 ##  LocalWords:  focei nlme linCmt solveC SolvedC UI saem VarCorr AIC

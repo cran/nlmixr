@@ -1,6 +1,7 @@
 .onAttach <- function(libname, pkgname){ ## nocov start
     ## Setup RxODE.prefer.tbl
     nlmixrSetupMemoize()
+    options(keep.source=TRUE)
 }
 
 nlmixrSetupMemoize <- function(){
@@ -52,6 +53,7 @@ nlmixrForget <- function(){
 ##' @importFrom methods is
 ##' @importFrom Rcpp evalCpp
 ##' @importFrom ggplot2 ggplot aes geom_point facet_wrap geom_line geom_abline xlab geom_smooth
+##' @importFrom RcppArmadillo armadillo_version
 ##' @useDynLib nlmixr, .registration=TRUE
 
 
@@ -75,6 +77,10 @@ nlmixrLogo <- function(str="", version=sessionInfo()$otherPkgs$nlmixr$Version){
 ##' @export
 nlmixrVersion <- function(){
     nlmixrLogo()
+}
+
+armaVersion <- function(){
+    nlmixrLogo(str="RcppArmadiilo", RcppArmadillo::armadillo_version())
 }
 
 ##' nlmixr fits population PK and PKPD non-linear mixed effects models.
@@ -149,6 +155,84 @@ nlmixr.nlmixr.ui.focei.fit <- nlmixr.nlmixr.ui.nlme
 ##' @rdname nlmixr
 ##' @export
 nlmixr.nlmixr.ui.saem <- nlmixr.nlmixr.ui.nlme
+##' Convert/Format the data appropriately for nlmixr
+##'
+##' @param data is the name of the data to convert.  Can be a csv file
+##'     as well.
+##' @return Appropriately formatted data
+##' @author Matthew L. Fidler
+##' @keywords internal
+##' @export
+nlmixrData <- function(data){
+    UseMethod("nlmixrData");
+}
+##' @export
+##' @rdname nlmixrData
+nlmixrData.character <- function(data){
+    if (!file.exists(data)){
+        stop(sprintf("%s does not exist.", data))
+    }
+    if (regexpr(rex::rex(".csv", end), data) != -1){
+        return(nlmixrData.default(utils::read.csv(data, na.strings=c(".", "NA", "na", ""))))
+    } else {
+        stop(sprintf("Do not know how to read in %s", data));
+    }
+}
+##' @export
+##' @rdname nlmixrData
+nlmixrData.default <- function(data){
+    dat <- data;
+    nm1 <- toupper(names(dat));
+    for (n in c("ID", "EVID", "TIME", "DV", "AMT")){
+        w <- which(nm1 == n)
+        if (length(w) == 1L){
+            names(dat)[w] <- n;
+        } else if (length(w) == 0L){
+            stop(sprintf("Need '%s' data item in dataset.", n))
+        } else {
+            stop(sprintf("Multiple '%s' columns in dataset.", n))
+        }
+    }
+    if (is(dat$ID, "factor")){
+        dat$ID <- paste(dat$ID);
+    }
+    idSort <- .Call(`_nlmixr_chkSortIDTime`, as.integer(dat$ID), as.double(dat$TIME), as.integer(dat$EVID));
+    if (idSort == 3L){
+        warning("NONMEM-style data converted to nlmixr/RxODE-style data.");
+        return(nlmixrData.default(nmDataConvert(dat)));
+    }
+    backSort <- c()
+    backSort2 <- c();
+    if (is(dat$ID, "character")){
+        lvl <- unique(dat$ID);
+        lab <- paste(lvl)
+        dat$ID <- factor(dat$ID, levels=lvl, labels=lab);
+        backSort <- levels(dat$ID);
+        backSort2 <- seq_along(backSort)
+        dat$ID <- as.integer(dat$ID);
+    } else {
+        if (idSort == 2L){
+            lvl <- unique(dat$ID);
+            lab <- paste(lvl)
+            dat$ID <- factor(dat$ID, levels=lvl, labels=lab);
+            backSort <- levels(dat$ID);
+            backSort2 <- seq_along(backSort)
+            dat$ID <- as.integer(dat$ID);
+        } else if (idSort == 0L){
+            warning("Sorting by ID, TIME; Output fit may not be in the same order as input dataset.")
+            dat <- dat[order(dat$ID, dat$TIME), ];
+            lvl <- unique(dat$ID);
+            lab <- paste(lvl)
+            dat$ID <- factor(dat$ID, levels=lvl, labels=lab);
+            backSort <- levels(dat$ID);
+            backSort2 <- seq_along(backSort)
+            dat$ID <- as.integer(dat$ID);
+        }
+    }
+    attr(dat, "backSort") <- backSort;
+    attr(dat, "backSort2") <- backSort2;
+    return(dat);
+}
 
 ##' Fit a nlmixr model
 ##'
@@ -170,38 +254,19 @@ nlmixr.nlmixr.ui.saem <- nlmixr.nlmixr.ui.nlme
 nlmixr_fit <- function(uif, data, est="nlme", control=list(), ...,
                        sum.prod=FALSE, calc.resid=TRUE){
     start.time <- Sys.time();
-    dat <- data;
-    if (is(dat$ID, "factor")){
-        dat$ID <- paste(dat$ID);
-    }
-    if (is(dat$ID, "character")){
-        lvl <- unique(dat$ID);
-        lab <- paste(lvl)
-        dat$ID <- factor(dat$ID, levels=lvl, labels=lab);
-        backSort <- levels(dat$ID);
-        backSort2 <- seq_along(backSort)
-        dat$ID <- as.integer(dat$ID);
-    } else {
-        idSort <- .Call(`_nlmixr_chkSortIDTime`, as.integer(dat$ID), as.double(dat$TIME));
-        backSort <- c()
-        if (idSort == 2L){
-            lvl <- unique(dat$ID);
-            lab <- paste(lvl)
-            dat$ID <- factor(dat$ID, levels=lvl, labels=lab);
-            backSort <- levels(dat$ID);
-            backSort2 <- seq_along(backSort)
-            dat$ID <- as.integer(dat$ID);
-        } else if (idSort == 0L){
-            warning("Sorting by ID, TIME; Output fit may not be in the same order as input dataset.")
-            dat <- dat[order(dat$ID, dat$TIME), ];
-            lvl <- unique(dat$ID);
-            lab <- paste(lvl)
-            dat$ID <- factor(dat$ID, levels=lvl, labels=lab);
-            backSort <- levels(dat$ID);
-            backSort2 <- seq_along(backSort)
-            dat$ID <- as.integer(dat$ID);
+    dat <- nlmixrData(data);
+    up.covs <- toupper(uif$all.covs);
+    up.names <- toupper(names(dat))
+    for (i in seq_along(up.covs)){
+        w <- which(up.covs[i] == up.names)
+        if (length(w) == 1){
+            names(dat)[w] = uif$all.covs[i];
         }
     }
+    backSort <- attr(dat, "backSort");
+    backSort2 <- attr(dat, "backSort2");
+    attr(dat, "backSort") <- NULL;
+    attr(dat, "backSort2") <- NULL;
     uif$env$infusion <- .Call(`_nlmixr_chkSolvedInf`, as.double(dat$EVID), as.integer(!is.null(uif$nmodel$lin.solved)));
     bad.focei <- "Problem calculating residuals, returning fit without residuals.";
     fix.dat <- function(x){
@@ -268,23 +333,57 @@ nlmixr_fit <- function(uif, data, est="nlme", control=list(), ...,
                 assign("start.time", start.time, env);
                 assign("est", est, env);
                 assign("stop.time", Sys.time(), env);
+                ## Now remove dlls
+                ## sf <- ret$uif$env$saem.fit
+                ## rx <- attr(sf, "rx")
+                ## if (is(rx, "RxODE")){
+                ##     rxDelete(rx);
+                ## }
+                ## cpp <- attr(sf, "saem.cpp")
+                ## if (file.exists(cpp)){
+                ##     try(unlink(cpp))
+                ## }
+                ## dll <- attr(sf, "saem.dll")
+                ## try({dyn.unload(dll)}, silent=TRUE);
+                ## if (file.exists(dll))
+                ##     unlink(dll);
+                ## rxDelete(ret$model$pred.only)
+                ## rxDelete(ret$model$ebe)
+                ## rxDelete(ret$model$inner)
                 return(ret)
             }
         } else {
             return(fit);
         }
-    } else if (est == "nlme" || est == "nlme.mu"){
+    } else if (est == "nlme" || est == "nlme.mu" || est == "nlme.mu.cov" || est == "nlme.free"){
         pt <- proc.time()
-        if (est == "nlme"){
+        est.type <- est;
+        if (est == "nlme.free"){
             fun <- uif$nlme.fun;
             specs <- uif$nlme.specs;
-        } else {
+        } else if (est == "nlme.mu"){
             fun <- uif$nlme.fun.mu;
             specs <- uif$nlme.specs.mu;
-            stop("Need to incorporate covariates to use this type of model...");
+        } else if (est == "nlme.mu.cov"){
+            fun <- uif$nlme.fun.mu.cov
+            specs <- uif$nlme.specs.mu.cov;
+        } else {
+            if (!is.null(uif$nlme.fun.mu.cov)){
+                est.type <- "nlme.mu.cov"
+                fun <- uif$nlme.fun.mu.cov
+                specs <- uif$nlme.specs.mu.cov;
+            } else if (!is.null(uif$nlme.mu.fun)){
+                est.type <- "nlme.mu"
+                fun <- uif$nlme.fun.mu
+                specs <- uif$nlme.specs.mu;
+            } else {
+                est.type <- "nlme.free"
+                fun <- uif$nlme.fun
+                specs <- uif$nlme.fun.specs;
+            }
         }
         grp.fn <- uif$grp.fn;
-        dat$nlmixr.grp <- factor(apply(data, 1, function(x){
+        dat$nlmixr.grp <- factor(apply(dat, 1, function(x){
             cur <- x;
             names(cur) <- names(dat);
             with(as.list(cur), {
@@ -321,6 +420,8 @@ nlmixr_fit <- function(uif, data, est="nlme", control=list(), ...,
                             control=control,
                             ...);
         }
+        class(fit) <- c(est.type, class(fit));
+
         ## Run FOCEi using same ETAs and THETA estimates to get
         ## comparable OBJFs and also extract table entries like
         ## CWRES.
@@ -372,6 +473,48 @@ nlmixr_fit <- function(uif, data, est="nlme", control=list(), ...,
         fit <- fix.dat(fit);
         env$uif.new <- uif.new;
         class(fit) <- c("nlmixr.ui.focei.fit", class(fit));
+        if (uif$.clean.dll){
+            focei.cleanup(fit)
+        }
+        assign("start.time", start.time, env);
+        assign("est", est, env);
+        assign("stop.time", Sys.time(), env);
+        return(fit);
+    } else if (est == "posthoc"){
+        control.posthoc <- list(NOTRUN=TRUE,
+                                ## inits.mat=mat,
+                                cores=1,
+                                find.best.eta=TRUE,
+                                numeric=(!is.null(uif$nmodel$lin.solved)),
+                                sum.prod=uif$env$sum.prod);
+        fit <- focei.fit(dat,
+                         inits=uif$focei.inits,
+                         PKpars=uif$theta.pars,
+                         ## par_trans=fun,
+                         model=uif$rxode.pred,
+                         pred=function(){return(nlmixr_pred)},
+                         err=uif$error,
+                         lower=uif$focei.lower,
+                         upper=uif$focei.upper,
+                         theta.names=uif$focei.names,
+                         eta.names=uif$eta.names,
+                         control=control.posthoc,
+                         ...)
+        env <- attr(fit, ".focei.env")
+        env$uif <- uif;
+        uif.new <- uif;
+        ns <- names(fit$theta);
+        for (n in ns){
+            uif.new$ini$est[uif.new$ini$name == n] <- fit$theta[n];
+        }
+        ome <- fit$omega;
+        w <- which(!is.na(uif.new$ini$neta1))
+        for (i in w){
+            uif.new$ini$est[i] <- ome[uif.new$ini$neta1[i], uif.new$ini$neta2[i]];
+        }
+        fit <- fix.dat(fit);
+        env$uif.new <- uif.new;
+        class(fit) <- c("nlmixr.ui.focei.posthoc", class(fit));
         assign("start.time", start.time, env);
         assign("est", est, env);
         assign("stop.time", Sys.time(), env);
@@ -421,8 +564,8 @@ saemControl <- function(seed=99,
                         n.burn=200, n.em=300,
                         nmc=3,
                         nu=c(2,2,2),
-                        atol = 1e-08,
-                        rtol = 1e-06,
+                        atol = 1e-06,
+                        rtol = 1e-04,
                         stiff = TRUE,
                         transit_abs = FALSE,
                         print=1,

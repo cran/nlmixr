@@ -34,7 +34,6 @@ rxFoceiEtaSetup <- function(object, ..., dv, eta, theta, nonmem=FALSE, table=TRU
         setup$rc <- 0L;
         setup$switch.solver <- as.integer(switch.solver);
         setup$pred.minus.dv <- as.integer(pred.minus.dv);
-        setup$numeric <- as.integer(numeric)
         if (!is.null(inits.vec)){
             setup$inits.vec <- inits.vec;
         }
@@ -241,16 +240,8 @@ rxFoceiInner <- function(object, ..., dv, eta, c.hess=NULL, eta.bak=NULL,
     args$eta <- eta
     args$eta.bak <- eta.bak
     args$estimate <- estimate
-    if (!any(names(args) == "numeric")){
-        args$numeric <- FALSE;
-    }
-    if (args$numeric){
-        inner.rxode <- object$pred.only;
-        inner.rxode$assignPtr(); ## Assign the ODE pointers (and Jacobian Type)
-    } else {
-        inner.rxode <- object$inner;
-        inner.rxode$assignPtr(); ## Assign the ODE pointers (and Jacobian Type)
-    }
+    inner.rxode <- object$inner;
+    inner.rxode$assignPtr(); ## Assign the ODE pointers (and Jacobian Type)
     args$object <- inner.rxode;
     env <- do.call(getFromNamespace("rxFoceiEtaSetup", "nlmixr"), args, envir = parent.frame(1));
 
@@ -285,11 +276,7 @@ rxFoceiInner <- function(object, ..., dv, eta, c.hess=NULL, eta.bak=NULL,
                 args$vars <- rep(0, length(args$eta));
                 output <- est0();
                 if (inherits(output, "try-error")){
-                    if (env$numeric == 1){
-                        output <- rxInnerNum(rep(0, length(args$eta)), env);
-                    } else {
-                        output <- rxInner(rep(0, length(args$eta)), env);
-                    }
+                    output <- rxInner(rep(0, length(args$eta)), env);
                 }
             }
             return(output);
@@ -298,9 +285,7 @@ rxFoceiInner <- function(object, ..., dv, eta, c.hess=NULL, eta.bak=NULL,
             ## ret <- rxInner(args$eta, env);
             ## print(as.list(env))
             if (inherits(ret, "try-error")){
-                pred.only <- object$pred.only;
-                pred.only$assignPtr(); ## Assign the ODE pointers (and Jacobian Type)
-                ret <- R.utils::captureOutput(rxInnerNum(args$eta, env)); ## Use finite difference instead.
+                stop("Cannot Solve")
             }
             return(ret);
         }
@@ -367,17 +352,7 @@ rxFoceiInner <- function(object, ..., dv, eta, c.hess=NULL, eta.bak=NULL,
                 attr(ret, "corrected") <- 1L;
             } else {
                 if (inherits(ret, "try-error")){
-                    cat("Hessian:\n");
-                    print(env$H)
-                    cat("log.det.H.neg.5:\n");
-                    print(env$log.det.H.neg.5)
-                    cat("log.det.OMGAinv.5:\n");
-                    print(env$log.det.OMGAinv.5)
-                    ## Try with numeric differences instead.
-                    pred.only <- object$pred.only;
-                    pred.only$assignPtr(); ## Assign the ODE pointers (and Jacobian Type)
-                    rxInnerNum(args$eta, env); ## Use finite difference instead.
-                    ret <- RxODE_focei_finalize_llik(env)
+                    stop("Cannot solve");
                 }
             }
         }

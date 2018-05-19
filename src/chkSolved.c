@@ -3,6 +3,50 @@
 #include <Rmath.h> //Rmath includes math.
 #include <R_ext/Rdynload.h>
 
+SEXP _nlmixr_convertEvid(SEXP evid, SEXP cmt){
+  int *ev = INTEGER(evid);
+  int *amt = INTEGER(cmt);
+  SEXP outs = PROTECT(allocVector(INTSXP,length(evid)));
+  int *out = INTEGER(outs);
+  for (unsigned int i = length(evid); i--;){
+    if (ev[i]){
+      if (amt[i] > 99){
+	int amt100 = amt[i]/100;
+	int amt99  = amt[i]-amt100*100;
+        out[i] = amt100*1e5+amt99*100+1;
+      } else {
+	out[i] = 100*amt[i]+1;
+      }
+    } else {
+      out[i]=0;
+    }
+  }
+  UNPROTECT(1);
+  return(outs);
+}
+
+SEXP _nlmixr_convertEvidRate(SEXP evid, SEXP cmt){
+  int *ev = INTEGER(evid);
+  int *amt = INTEGER(cmt);
+  SEXP outs = PROTECT(allocVector(INTSXP,length(evid)));
+  int *out = INTEGER(outs);
+  for (unsigned int i = length(evid); i--;){
+    if (ev[i]){
+      if (amt[i] > 99){
+        int amt100 = amt[i]/100;
+        int amt99  = amt[i]-amt100*100;
+        out[i] = amt100*1e5+amt99*100+10001;
+      } else {
+        out[i] = 100*amt[i]+10001;
+      }
+    } else {
+      out[i]=0;
+    }
+  }
+  UNPROTECT(1);
+  return(outs);
+}
+
 SEXP _nlmixr_chkSolvedInf(SEXP evid,SEXP solved){
   double *ev = REAL(evid);
   int n = length(evid);
@@ -46,17 +90,23 @@ SEXP _nlmixr_chkSolvedInf(SEXP evid,SEXP solved){
 }
 
 
-SEXP _nlmixr_chkSortIDTime(SEXP _id,SEXP _time){
+SEXP _nlmixr_chkSortIDTime(SEXP _id,SEXP _time, SEXP _evid){
   double *time = REAL(_time);
   int *id = INTEGER(_id);
-  int len = length(_time), i = 0, lastID;
-  double lastTime;
+  int *evid = INTEGER(_evid);
+  int len = length(_time), i = 0, lastID=-1;
+  double lastTime=-1;
   SEXP out = PROTECT(allocVector(INTSXP,1));
   INTEGER(out)[0] = 1;
   if (len != length(_id)){
     error("TIME and ID need the same length.");
   } else{
     for (i=0; i < len; i++){
+      if (evid[i] != 0 && abs(evid[i]) < 101){
+	INTEGER(out)[0] = 3;
+        UNPROTECT(1);
+	return out;
+      }
       if (i == 0){
 	lastID = id[i];
 	lastTime = time[i];

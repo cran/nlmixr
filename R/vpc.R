@@ -41,20 +41,37 @@ sim.one = function(zz, x) {
 }
 
 
-#' Visual predictive check (VPC)
+##' Vpc function for nlmixr
+##'
+##' @param sim Observed data frame or fit object
+##' @param ... Other parameters
+##'
+##' @export
+vpc <- function (sim, ...)
+{
+    UseMethod("vpc")
+}
+##' @rdname vpc
+##' @export
+vpc.default <- function(sim, ...){
+    vpc::vpc(sim, ...)
+}
+
+#' Visual predictive check (VPC) for nlmixr nlme objects
 #'
-#' Do visual predictive check (VPC) plots for nlme-base non-linear mixed effect models
+#' Do visual predictive check (VPC) plots for nlme-based non-linear mixed effect models
 #'
 #' @param fit nlme fit object
 #' @param nsim number of simulations
 #' @param condition conditional variable
+#' @inheritParams vpc::vpc
 #' @return NULL
 #' @examples
 #' specs <- list(fixed=lKA+lCL+lV~1, random = pdDiag(lKA+lCL~1), start=c(lKA=0.5, lCL=-3.2, lV=-1))
 #' fit <- nlme_lin_cmpt(theo_md, par_model=specs, ncmt=1, verbose=TRUE)
 #' vpc(fit, nsim = 100, condition = NULL)
 #' @export
-vpc = function(fit, nsim=100, condition=NULL)
+vpc_nlmixr_nlme = function(fit, nsim=100, condition=NULL)
 {
     nlmeModList(fit$env);
     on.exit({nlmeModList(new.env(parent=emptyenv()))})
@@ -64,7 +81,7 @@ vpc = function(fit, nsim=100, condition=NULL)
 
     s = sapply(1:nsim, sim.one, x=fit)
 
-	cond.var = if(is.null(condition)) rep(1, dim(..ModList$dat.g)[1]) else ..ModList$dat.g[, condition]
+    cond.var = if(is.null(condition)) rep(1, dim(..ModList$dat.g)[1]) else ..ModList$dat.g[, condition]
 	levels = sort(unique(cond.var))
 	for (k in 1:length(levels)) {
 		sel = cond.var == levels[k]
@@ -80,6 +97,12 @@ vpc = function(fit, nsim=100, condition=NULL)
 
 	options(warn=0)
 	invisible(NULL)
+}
+
+#' @rdname vpc_nlmixr_nlme
+#' @export
+vpc.nlmixr_nlme <- function(sim, ...){
+    vpc_nlmixr_nlme(sim, ...);
 }
 
 #vpc(fit, 100)

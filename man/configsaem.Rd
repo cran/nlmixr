@@ -5,7 +5,7 @@
 \title{Configure an SAEM model}
 \usage{
 configsaem(model, data, inits, mcmc = list(niter = c(200, 300), nmc = 3, nu =
-  c(2, 2, 2)), ODEopt = list(atol = 1e-08, rtol = 1e-06, stiff = 1,
+  c(2, 2, 2)), ODEopt = list(atol = 1e-06, rtol = 1e-04, stiff = 1,
   transit_abs = 0), distribution = c("normal", "poisson", "binomial"),
   seed = 99, fixed = NULL)
 }
@@ -64,7 +64,7 @@ saem_fit <- gen_saem_user_fn(model=lincmt(ncmt=1, oral=T))
 
 
 #--- saem cfg
-nmdat = read.table("theo_sd.dat",  head=T)
+nmdat = theo_sd
 model = list(saem_mod=saem_fit, covars="WT")
 inits = list(theta=c(.05, .5, 2))
 cfg   = configsaem(model, nmdat, inits)

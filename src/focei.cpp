@@ -23,11 +23,11 @@ extern "C" double rxLhs(int i);
 extern "C" void rxCalcLhs(int i);
 extern "C" unsigned int nObs();
 extern "C" void RxODE_ode_solve_env(SEXP sexp_rho);
-extern "C" void RxODE_ode_free();
-extern "C" double RxODE_safe_zero(double x);
-extern "C" double RxODE_safe_log(double x);
-extern "C" double RxODE_sign_exp(double sgn, double x);
-extern "C" double RxODE_abs_log(double x);
+#define RxODE_safe_zero(a) ((a) == 0 ? DOUBLE_EPS : (a))
+#define RxODE_safe_log(a) (((a) <= 0) ? log(DOUBLE_EPS) : log(a))
+#define RxODE_sign_exp(sgn, x)(((sgn) > 0.0) ? exp(x) : (((sgn) < 0.0) ? -exp(x) : 0.0))
+#define RxODE_abs_log(x) ((fabs(x) <= sqrt(DOUBLE_EPS)) ? log(sqrt(DOUBLE_EPS)) : (((x) > 0.0) ? log(x) ? (((x) == 0) ? 0.0 : log(-x))))
+
 void rxDetaDomega(SEXP rho);
 double stablizeNums(double x){
   if (ISNAN(x)){
@@ -113,7 +113,6 @@ void rxGrad(SEXP rho){
         // for (j = 0; j < length(sexp_theta); j++){
         //   Rprintf("params[%d] = %f\n", j, par_ptr[j]);
         // }
-        RxODE_ode_free();
         stop("A covariance term is zero or negative and should remain positive");
       }
       r(k, 0)=Lhs(j); // R always has to be positive.
@@ -143,7 +142,6 @@ void rxGrad(SEXP rho){
     lp[j] = RxODE_sum(lpi+3*nObs()*j,3*nObs());
   }
   // Free
-  RxODE_ode_free();
   Free(lpi);
   e["err"] = err;
   e["f"] = f;
@@ -151,264 +149,6 @@ void rxGrad(SEXP rho){
   e["dR"] = rp;
   e["R"] = r;
   e["lp"] = -lp;
-}
-
-// [[Rcpp::export]]
-void rxInnerNum(SEXP etanews, SEXP rho){
-  Environment e = as<Environment>(rho);
-  if (!(e.exists("neta") && e.exists("ntheta") && e.exists("dOmega") &&
-        e.exists("DV") && e.exists("nonmem") && e.exists("eta") &&
-        e.exists("eta.mat") && e.exists("eta.trans") &&
-        e.exists("params")
-        )){
-    stop("Environment not setup correctly for rxInnerNum.");
-  }
-  NumericVector par_ptr = as<NumericVector>(e["params"]);
-  IntegerVector eta_i = as<IntegerVector>(e["eta.trans"]);
-  NumericVector etanew = as<NumericVector>(etanews);
-  NumericVector eta = as<NumericVector>(e["eta"]);
-
-  mat etam = as<mat>(e["eta.mat"]);
-  unsigned int recalc = 0;
-  unsigned int i = 0, j = 0, k = 0;
-
-  if (!e.exists("llik")){
-    recalc = 1;
-  } else if (eta.size() != etanew.size()){
-    stop("Inconsistent eta size for rxInnerNum.");
-  } else {
-    for (i = 0; i < (unsigned int)(eta.size()); i++){
-      if (eta[i] != etanew[i]){
-        recalc = 1;
-        break;
-      }
-    }
-  }
-
-  mat cur;
-  if (recalc){
-    // Rprintf("Start!\n");
-    for (i = 0; i < (unsigned int)(etanew.size()); i++){
-      /* Rprintf("\tpar[%d] from %f to %f\n",eta_i[i],par_ptr[eta_i[i]], eta[i]); */
-      par_ptr[eta_i[i]] = etanew[i];
-      eta[i] = etanew[i];
-      etam(i,0) = eta[i];
-    }
-    e["params"] = par_ptr;
-    e["eta"]    = eta;
-    e["eta.mat"] = etam;
-
-    e["params.0"] = par_ptr;
-    e["eta.0"]    = eta;
-    e["eta.mat.0"] = etam;
-    
-    RxODE_ode_solve_env(rho);
-    // In this case F = lhs(0)
-    // and R = lhs(1)
-    NumericVector DV = as<NumericVector>(e["DV"]);
-  
-    NumericVector f(nObs());
-    mat err = mat(nObs(),1);
-    mat r = mat(nObs(),1);
-  
-    NumericVector llik(1);
-  
-    double *llik0 =Calloc(nObs()*2,double);
-
-    // Get the base F, Err and R
-    int prd = as<int>(e["pred.minus.dv"]);
-    for (i = 0; i < nAllTimes(); i++){
-      if (!rxEvid(i)){
-	rxCalcLhs(i);
-	f[k] = Lhs(0); // Pred
-	if (prd == 1){
-	  err(k, 0) =  f[k] - DV[k];
-	} else {
-	  err(k, 0) =  DV[k] - f[k];
-	}
-	if (Lhs(1) < 0){
-	  for (j = 0; j < nLhs(); j++){
-	    Rprintf("Lhs(%d) = %f\n", j, Lhs(j));
-	  }
-	  Rprintf("\n");
-	  // temp = getAttrib(sexp_theta, R_NamesSymbol);
-	  // for (j = 0; j < length(sexp_theta); j++){
-	  //   Rprintf("params[%d] = %f\n", j, par_ptr[j]);
-	  // }
-	  RxODE_ode_free();
-	  stop("A covariance term is zero or negative and should remain positive");
-	}
-	r(k, 0)=Lhs(1); // R always has to be positive.
-	k++;
-      }
-    }
-    // Rprintf("Done getting F and R!\n");
-    // Now get the dErr/d(eta); and dR/d(eta) by finitie difference (simple forward difference)
-    double eps = 1e-4;
-    unsigned int neta = as<unsigned int>(e["neta"]);
-  
-    mat fpm = mat(nObs(), neta); // d(pred)/d(eta#)
-    mat rp = mat(nObs(),neta);
-
-    unsigned int curEta;
-    double tmp;
-    for (curEta = 0; curEta < neta; curEta++){
-      for (i = 0; i < (unsigned int)(etanew.size()); i++){
-	/* Rprintf("\tpar[%d] from %f to %f\n",eta_i[i],par_ptr[eta_i[i]], eta[i]); */
-	if (i == curEta){
-	  // Forward difference
-	  par_ptr[eta_i[i]] = etanew[i]+eps;
-	} else {
-	  par_ptr[eta_i[i]] = etanew[i];
-	}
-	eta[i] = etanew[i];
-	etam(i,0) = eta[i];
-      }
-      e["params"] = par_ptr;
-      e["eta"]    = eta;
-      e["eta.mat"] = etam;
-
-      e["params.0"] = par_ptr;
-      e["eta.0"]    = eta;
-      e["eta.mat.0"] = etam;
-    
-      RxODE_ode_solve_env(rho);
-      // Now populate dpred/deta# and dR/deta#
-      k = 0;
-      if (!rxEvid(i)){
-	rxCalcLhs(i);
-	tmp = Lhs(0)-f[k];
-	if (tmp == 0){
-	  tmp = 0;
-	} else if (tmp  < 0){
-	  tmp = -exp(log(-tmp)-log(eps));
-	} else {
-	  tmp = exp(log(tmp)-log(eps));
-	}
-	fpm(k, curEta) = stablizeNums(tmp);
-	tmp = Lhs(1)-r(k, 0);
-	if (tmp == 0){
-	  tmp  = 0;
-        } else if (tmp < 0){
-	  tmp  = -exp(log(-tmp)-log(eps));
-	} else {
-	  tmp  = exp(log(tmp)-log(eps));
-        }
-	rp(k, curEta) = stablizeNums(tmp);
-	  k++;
-      }
-    }
-    // Rprintf("Calculated fpm and rp!\n");
-    // Now calculate the others like rxInner with sensitivity equations.
-    mat B = mat(nObs(),1);
-    List c(neta);
-    List a(neta);
-  
-    mat lp = mat(neta,1);
-    
-    double *lpi =Calloc(neta*nObs()*3,double);
-  
-    for (i = 0; i < neta; i++){
-      a[i] = mat(nObs(),1);
-      c[i] = mat(nObs(),1);
-      lp[i] = 0;
-    }
-    int do_nonmem = as<int>(e["nonmem"]);
-    int do_table = as<int>(e["table"]);
-    k = 0;
-    for (i = 0; i < nAllTimes(); i++){
-      if (!rxEvid(i)){
-	B(k,0) = 2.0/RxODE_safe_zero(r(k, 0));
-	// d(pred)/d(eta#)
-	for (j = 0; j < neta; j++){
-	  cur = as<mat>(a[j]);
-	  if (do_nonmem){
-	    cur(k,0) =  fpm(k, j);
-	  } else {
-	    cur(k,0) = fpm(k, j)-err(k, 0)/RxODE_safe_zero(r(k, 0))*rp(k, j);
-	  }
-	  a[j]=cur;
-	  cur = as<mat>(c[j]);
-	  cur(k, 0) = rp(k, j)/r(k, 0);
-	  c[j] = cur;
-	  lpi[k         +3*nObs()*j] = _prod(5, 0.25, err(k, 0), err(k, 0), B(k, 0), cur(k,0));
-	  lpi[k+nObs()  +3*nObs()*j] = - _prod(2, 0.5, cur(k,0));
-	  lpi[k+2*nObs()+3*nObs()*j] = - _prod(4, 0.5, err(k, 0), fpm(k, j), B(k, 0));
-	}
-	llik0[k] = -_prod(4,0.5,err(k, 0),err(k, 0),1.0/RxODE_safe_zero(r(k, 0)));
-	llik0[k+nObs()] = -_prod(2, 0.5, RxODE_safe_log(r(k, 0)));
-	k++;
-      }
-    }
-    // Rprintf("Calculated B, c, a and llik pieces...\n");
-    // Deferred sums (to reduce round-off error)
-    for (j = 0; j < neta; j++){
-      // Rprintf("%f", eta[j]);
-      lp[j] = RxODE_sum(lpi+3*nObs()*j,3*nObs());
-    }
-    llik[0] = RxODE_sum(llik0,2*nObs());
-
-    
-    Free(lpi);
-    Free(llik0);
-
-    // Free
-    RxODE_ode_free();
-  
-    mat llikm = mat(1,1);
-    
-    mat omegaInv = as<mat>(e["omegaInv"]);
-
-    NumericVector llik2(1);
-    llikm(0, 0)=  llik[0];
-    llikm = -(llikm - 0.5*(etam.t() * omegaInv * etam));
-    llik2[0] = llikm(0, 0);
-
-    mat ep2 = -(lp - omegaInv * etam);
-    if (do_table){
-      mat omega = as<mat>(e["omega"]);
-      mat Vfo_full = (fpm * omega * fpm.t()); // From Mentre 2006 p. 352
-      // There seems to be a difference between how NONMEM and R/S types
-      // of software calculate WRES.  Mentre 2006 states that the
-      // Variance under the FO condition should only be diag(Vfo_full) + Sigma,
-      // but Hooker 2007 claims there is a
-      // diag(Vfo_full)+diag(dh/deta*Sigma*dh/deta).
-      // h = the additional error from the predicted function.
-      //
-      // In the nlmixr/FOCEi implemented here, the variance of the err
-      // term is 1, or Sigma is a 1 by 1 matrix with one element (1)
-      //
-      // The dh/deta term would be the sd term, or sqrt(r), which means
-      // sqrt(r)*sqrt(r)=|r|.  Since r is positive, this would be r.
-      //
-      // Also according to Hooker, WRES is calculated under the FO
-      // assumption, where eta=0, eps=0 for this r term and Vfo term.
-      // However, conditional weighted residuals are calculated under
-      // the FOCE condition for the Vfo and the FO conditions for
-      // dh/deta
-      //
-      // The Vfo calculation is separated out so it can be used in CWRES and WRES.
-    
-      mat Vfo = Vfo_full.diag();
-      mat dErr_dEta = fpm * etam;
-      e["Vfo"] = wrap(Vfo);
-      e["dErr_dEta"] = wrap(dErr_dEta);
-    }
-    
-    // Assign in env
-    e["err"] = err;
-    e["f"] = f;
-    e["dErr"] = fpm;
-    e["dR"] = rp;
-    e["c"] = c;
-    e["R"] = r;
-    e["B"] = B;
-    e["a"] = a;
-    e["llik"] = llik;
-    e["lp"] = lp;
-    e["llik2"] = wrap(llik2);
-    e["ep2"] = wrap(ep2);
-  }
 }
 
 // [[Rcpp::export]]
@@ -420,10 +160,6 @@ void rxInner(SEXP etanews, SEXP rho){
         e.exists("params")
         )){
     stop("Environment not setup correctly for rxInner.");
-  }
-  if (as<int>(e["numeric"]) == 1){
-    rxInnerNum(etanews, rho);
-    return;
   }
   NumericVector par_ptr = as<NumericVector>(e["params"]);
   IntegerVector eta_i = as<IntegerVector>(e["eta.trans"]);
@@ -461,7 +197,6 @@ void rxInner(SEXP etanews, SEXP rho){
     List dOmega = as<List>(e["dOmega"]);
     NumericVector DV = as<NumericVector>(e["DV"]);
     int do_nonmem = as<int>(e["nonmem"]);
-    int do_table = as<int>(e["table"]);
     
     mat fpm = mat(nObs(), neta); // d(pred)/d(eta#)
     
@@ -529,7 +264,6 @@ void rxInner(SEXP etanews, SEXP rho){
           // for (j = 0; j < length(sexp_theta); j++){
           //   Rprintf("params[%d] = %f\n", j, par_ptr[j]);
           // }
-          RxODE_ode_free();
           stop("A covariance term is zero or negative and should remain positive");
         }
         r(k, 0)=Lhs(j); // R always has to be positive.
@@ -563,8 +297,6 @@ void rxInner(SEXP etanews, SEXP rho){
     llik[0] = RxODE_sum(llik0,2*nObs());
     Free(lpi);
     Free(llik0);
-    // Free
-    RxODE_ode_free();
     mat llikm = mat(1,1);
     
     mat omegaInv = as<mat>(e["omegaInv"]);
@@ -575,35 +307,6 @@ void rxInner(SEXP etanews, SEXP rho){
     llik2[0] = llikm(0, 0);
 
     mat ep2 = -(lp - omegaInv * etam);
-    if (do_table){
-      mat omega = as<mat>(e["omega"]);
-      mat Vfo_full = (fpm * omega * fpm.t()); // From Mentre 2006 p. 352
-      // There seems to be a difference between how NONMEM and R/S types
-      // of software calculate WRES.  Mentre 2006 states that the
-      // Variance under the FO condition should only be diag(Vfo_full) + Sigma,
-      // but Hooker 2007 claims there is a
-      // diag(Vfo_full)+diag(dh/deta*Sigma*dh/deta).
-      // h = the additional error from the predicted function.
-      //
-      // In the nlmixr/FOCEi implemented here, the variance of the err
-      // term is 1, or Sigma is a 1 by 1 matrix with one element (1)
-      //
-      // The dh/deta term would be the sd term, or sqrt(r), which means
-      // sqrt(r)*sqrt(r)=|r|.  Since r is positive, this would be r.
-      //
-      // Also according to Hooker, WRES is calculated under the FO
-      // assumption, where eta=0, eps=0 for this r term and Vfo term.
-      // However, conditional weighted residuals are calculated under
-      // the FOCE condition for the Vfo and the FO conditions for
-      // dh/deta
-      //
-      // The Vfo calculation is separated out so it can be used in CWRES and WRES.
-    
-      mat Vfo = Vfo_full.diag();
-      mat dErr_dEta = fpm * etam;
-      e["Vfo"] = wrap(Vfo);
-      e["dErr_dEta"] = wrap(dErr_dEta);
-    }
     
     // Assign in env
     e["err"] = err;
@@ -682,11 +385,7 @@ void rxHessian(SEXP rho){
 
 void rxInner2(SEXP sexp_eta, SEXP sexp_rho){
   Environment e = as<Environment>(sexp_rho);
-  if (as<int>(e["numeric"]) == 1){
-    rxInnerNum(sexp_eta, sexp_rho);
-  } else {
-    rxInner(sexp_eta, sexp_rho);
-  }
+  rxInner(sexp_eta, sexp_rho);
   if (as<int>(e["switch.solver"]) == 1){
     if (as<int>(e["rc"]) != 0){
       if (as<int>(e["stiff"])){
@@ -696,11 +395,7 @@ void rxInner2(SEXP sexp_eta, SEXP sexp_rho){
       }
       Rprintf("\nWarning: Switched solver.\n");
       e.remove("llik");
-      if (as<int>(e["numeric"]) == 1){
-        rxInnerNum(sexp_eta, sexp_rho);
-      } else {
-        rxInner(sexp_eta, sexp_rho);
-      }
+      rxInner(sexp_eta, sexp_rho);
       // Switch back.
       if (as<int>(e["stiff"])){
         e["stiff"] = 0;
@@ -779,13 +474,6 @@ NumericVector RxODE_focei_finalize_llik(SEXP rho){
   vec ldiag = log(diag);
   e["log.det.H.neg.5"]= wrap(sum(ldiag));
   NumericVector ret = -as<NumericVector>(e["llik2"])+ as<NumericVector>(e["log.det.OMGAinv.5"])-as<NumericVector>(e["log.det.H.neg.5"]);
-  int do_table = as<int>(e["table"]);
-  if (do_table){
-    ret.attr("fitted") = as<NumericVector>(e["f"]);
-    ret.attr("Vi") = as<NumericVector>(e["R"]); // Sigma
-    ret.attr("Vfo") = as<NumericVector>(e["Vfo"]); // FO Variance (See Mentre 2006) Prediction Discrepancies for the Evaluation of Nonlinear Mixed-Effects Models
-    ret.attr("dErr_dEta") = as<NumericVector>(e["dErr_dEta"]);
-  }
   ret.attr("posthoc") = as<NumericVector>(e["eta"]);
   if (e.exists("c.hess")){
     Nullable<NumericVector> cHess  = e["c.hess"];
@@ -795,9 +483,6 @@ NumericVector RxODE_focei_finalize_llik(SEXP rho){
   }
   ret.attr("corrected") = as<NumericVector>(e["corrected"]);
   rxDetaDomega(e);
-  if (!do_table){
-    ret.attr("omega.28") = as<NumericVector>(e["omega.28"]);
-  }
   // ret.attr("llik2") = as<NumericVector>(e["llik2"]);
   // ret.attr("log.det.OMGAinv.5") = as<NumericVector>(e["log.det.OMGAinv.5"]);
   // ret.attr("log.det.H.neg.5") = as<NumericVector>(e["log.det.H.neg.5"]);
@@ -963,7 +648,6 @@ void rxOuter_ (SEXP rho){
           Rprintf("Lhs(%d) = %f\n", j, Lhs(j));
         }
         Rprintf("\n");
-        RxODE_ode_free();
         stop("A covariance term is zero or negative and should remain positive.");
       }
       r(k, 0)=Lhs(j); // R always has to be positive.
@@ -1192,18 +876,6 @@ void rxOuter_ (SEXP rho){
     }
   }
   /* llik = -.5*sum(eps^2/(f^2*sig2) + log(f^2*sig2)) - .5*t(ETA) %*% OMGAinv %*% ETA */
-
-  int do_table = as<int>(e["table"]);
-  if (do_table){
-    mat omega = as<mat>(e["omega"]);
-    mat Vfo_full = (fpm * omega * fpm.t()); // From Mentre 2006 p. 352
-    mat Vfo = Vfo_full.diag();
-    mat etam = as<mat>(e["eta.mat"]);
-    mat dErr_dEta = fpm * etam;
-    mat dR_dEta = rp * etam;
-    e["Vfo"] = wrap(Vfo);
-    e["dErr_dEta"] = wrap(dErr_dEta);
-  }
   
   e["f"] = f;
   e["err"] = err;
@@ -1229,7 +901,6 @@ void rxOuter_ (SEXP rho){
 
   e["l.dEta.dTheta"] = lDnDt;
   e["H2"] = lDn;
-  RxODE_ode_free();
 }
 
 // [[Rcpp::export]]
@@ -1490,15 +1161,6 @@ void rxDetaDtheta(SEXP rho){
     ret.attr("dEta.dTheta") = as<NumericVector>(wrap(DnDt));
     mat omega = as<mat>(e["omega"]);
     mat fpm = as<mat>(e["dErr"]);
-    int do_table = as<int>(e["table"]);
-    if (do_table){
-      mat Vfo_full = (fpm * omega * fpm.t()); // From Mentre 2006 p. 352
-      mat Vfo = Vfo_full.diag();
-      mat dErr_dEta = fpm * etam;
-      ret.attr("Vfo") = wrap(Vfo);
-      ret.attr("dErr_dEta") = wrap(dErr_dEta);
-      ret.attr("Vi") = as<NumericVector>(e["R"]); // Sigma
-    }
     ret.attr("corrected") = as<NumericVector>(e["corrected"]);
     e["ret"] = ret;
   } else {

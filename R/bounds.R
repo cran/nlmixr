@@ -618,11 +618,11 @@ as.data.frame.nlmixrBounds <- function(x, row.names = NULL, optional = FALSE, ..
 
 ##' @export
 print.nlmixrBounds <- function(x, ...){
-    cat("Fixed Effects ($theta):\n");
+    message(paste0(crayon::bold("Fixed Effects")," (", crayon::bold$blue("$theta"), "):"));
     print(x$theta);
     omega <- x$omega;
     if (dim(omega)[1] > 0){
-        cat("\nOmega ($omega):\n");
+        message(paste0("\n", crayon::bold("Omega")," (", crayon::bold$blue("$omega"), "):"))
         print(omega)
     }
 }
@@ -676,16 +676,16 @@ nlmixrBounds.eta.names <- function(obj){
 ##'@export
 str.nlmixrBounds <- function(object, ...){
     str(as.data.frame(object), ...);
-    message(" $ theta     : num ... (theta estimates)")
-    message(" $ theta.full: num ... (theta estimates, including error terms)")
-    message(" $ omega     : matrix ... (omega matrix)")
-    message(" $ random    : matrix class ... (Based on Between Subject Random effects)")
-    message(" $ fixed.form: formula  ... (Fixed effect parameters based on theta.)")
-    message(" $ focei.upper: Upper bounds for FOCEi")
-    message(" $ focei.lower: Lower bounds for FOCEi")
-    message(" $ focei.err.type: Residual Error type for FOCEi thetas")
-    message(" $ eta.names: Eta names")
-    message(" $ focei.names: Theta names for FOCEi")
+    cat(" $ theta     : num ... (theta estimates)\n")
+    cat(" $ theta.full: num ... (theta estimates, including error terms)\n")
+    cat(" $ omega     : matrix ... (omega matrix)\n")
+    cat(" $ random    : matrix class ... (Based on Between Subject Random effects)\n")
+    cat(" $ fixed.form: formula  ... (Fixed effect parameters based on theta.)\n")
+    cat(" $ focei.upper: Upper bounds for FOCEi\n")
+    cat(" $ focei.lower: Lower bounds for FOCEi\n")
+    cat(" $ focei.err.type: Residual Error type for FOCEi thetas\n")
+    cat(" $ eta.names: Eta names\n")
+    cat(" $ focei.names: Theta names for FOCEi\n")
 }
 
 ##' Get upper/lower/names for THETAs
@@ -785,6 +785,8 @@ nlmixrBoundsOmega <- function(x, nlme=FALSE){
                     return(nlme::pdSymm(as.matrix(Matrix::nearPD(mat)$mat), form=frm))
                 }
             }
+            w <- which(df$neta1 == df$neta2);
+            dimnames(mat) <- list(paste(df$name[w]), paste(df$name[w]));
             return(mat);
         } else {
             return(matrix(double(), 0, 0))

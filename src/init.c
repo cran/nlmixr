@@ -4,9 +4,8 @@
 #include <R_ext/Rdynload.h>
 
 /* .C calls */
-extern void hermite_ek_compute_(void *, void *, void *);
 extern void parse_ode(void *, void *, void *, void *);
-extern void parse_pars(void *, void *, void *, void *);
+extern void parse_pars(void *, void *, void *, void *, void *, void *, void *);
 
 /* Internal C calls, should not be called outside of C code. */
 typedef void (*S_fp) (double *, double *);
@@ -35,7 +34,6 @@ extern SEXP _nlmixr_sFOCEi(SEXP, SEXP);
 // FOCEi
 extern SEXP _nlmixr_rxGrad(SEXP rhoSEXP);
 extern SEXP _nlmixr_rxInner(SEXP etanewsSEXP, SEXP rhoSEXP);
-extern SEXP _nlmixr_rxInnerNum(SEXP etanewsSEXP, SEXP rhoSEXP);
 extern SEXP _nlmixr_rxHessian(SEXP rhoSEXP);
 extern SEXP _nlmixr_RxODE_focei_eta_lik(SEXP sexp_etaSEXP, SEXP sexp_rhoSEXP);
 extern SEXP _nlmixr_RxODE_focei_eta_lp(SEXP sexp_etaSEXP, SEXP sexp_rhoSEXP);
@@ -48,19 +46,21 @@ extern SEXP _nlmixr_rxDetaDtheta(SEXP rhoSEXP);
 extern SEXP _nlmixr_rxOuter(SEXP rhoSEXP);
 extern SEXP _nlmixr_rxUpdateEtas(SEXP DnDhSSEXP, SEXP DhSSEXP, SEXP initSSEXP, SEXP acceptNSSEXP);
 extern SEXP _nlmixr_chkSolvedInf(SEXP, SEXP);
-extern SEXP _nlmixr_chkSortIDTime(SEXP _id,SEXP _time);
+extern SEXP _nlmixr_chkSortIDTime(SEXP _id,SEXP _time, SEXP _evid);
+extern SEXP _nlmixr_nlmixrParameters(SEXP, SEXP);
+extern SEXP _nlmixr_nlmixrResid(SEXP, SEXP, SEXP,SEXP, SEXP);
+extern SEXP _nlmixr_convertEvidRate(SEXP, SEXP);
+extern SEXP _nlmixr_convertEvid(SEXP, SEXP);
 
 static const R_CMethodDef CEntries[] = {
-    {"hermite_ek_compute_",     (DL_FUNC) &hermite_ek_compute_,      3},
     {"parse_ode",               (DL_FUNC) &parse_ode,                4},
-    {"parse_pars",              (DL_FUNC) &parse_pars,               4},
+    {"parse_pars",              (DL_FUNC) &parse_pars,               7},
     {NULL, NULL, 0}
 };
 
 static const R_CallMethodDef CallEntries[] = {
   {"_nlmixr_chkSolvedInf",(DL_FUNC) &_nlmixr_chkSolvedInf, 2},
   {"_nlmixr_rxInner", (DL_FUNC) &_nlmixr_rxInner, 2},
-  {"_nlmixr_rxInnerNum", (DL_FUNC) &_nlmixr_rxInnerNum, 2},
   {"_nlmixr_rxGrad", (DL_FUNC) &_nlmixr_rxGrad, 1},
   {"_nlmixr_rxHessian", (DL_FUNC) &_nlmixr_rxHessian, 1},
   {"_nlmixr_RxODE_focei_eta_lik", (DL_FUNC) &_nlmixr_RxODE_focei_eta_lik, 2},
@@ -85,8 +85,12 @@ static const R_CallMethodDef CallEntries[] = {
   {"_nlmixr_llik_neg_binomial", (DL_FUNC) &_nlmixr_llik_neg_binomial, 2},
   {"_nlmixr_grFOCEi",(DL_FUNC) &_nlmixr_grFOCEi, 2},
   {"_nlmixr_sFOCEi",(DL_FUNC) &_nlmixr_sFOCEi, 2},
-  {"_nlmixr_chkSortIDTime",(DL_FUNC) &_nlmixr_chkSortIDTime, 2},
+  {"_nlmixr_chkSortIDTime",(DL_FUNC) &_nlmixr_chkSortIDTime, 3},
   {"slice_wrap",           (DL_FUNC) &slice_wrap,            7},
+  {"_nlmixr_nlmixrParameters", (DL_FUNC) &_nlmixr_nlmixrParameters, 2},
+  {"_nlmixr_nlmixrResid", (DL_FUNC) &_nlmixr_nlmixrResid, 5},
+  {"_nlmixr_convertEvid", (DL_FUNC) &_nlmixr_convertEvid, 2},
+  {"_nlmixr_convertEvidRate", (DL_FUNC) &_nlmixr_convertEvidRate, 2},
   {NULL, NULL, 0}
 };
 

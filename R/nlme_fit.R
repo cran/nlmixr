@@ -143,7 +143,7 @@ nlme_lin_cmpt <- function(dat, par_model,
 	body(PKpars) <- parse(text=x)
 
     #a new env with a ref in .GlobalEnv, holding model components
-    #a hack due to non-std call by nlme
+                                        #a hack due to non-std call by nlme
     ## assign("..ModList", new.env(parent=emptyenv()), envir=.GlobalEnv)
 
     #master par list
@@ -221,7 +221,7 @@ nlme_lin_cmpt <- function(dat, par_model,
     return(ret);
 }
 
-nlme_ode_gen_usr_fn <- function(arg1, arg2, transit_abs, atol, rtol, mc.cores){
+nlme_ode_gen_usr_fn <- function(arg1, arg2, transit_abs, atol, rtol, hmin, hmax, hini, maxordn, maxords, maxsteps, mc.cores){
     fun <- eval(parse(text=sprintf("function(%s, TIME, ID){NULL;}", arg1)))
     pkpars <- eval(parse(text=sprintf("bquote((nlmixr::nlmeModList(\"PKpars\"))(%s))", arg2)));
     body <- bquote({
@@ -248,7 +248,9 @@ nlme_ode_gen_usr_fn <- function(arg1, arg2, transit_abs, atol, rtol, mc.cores){
                                print(theta)
                            }
 
-                           m <- nlmixr::nlmeModList("m1")$run(theta, ev, inits, transit_abs=.(transit_abs), atol=.(atol), rtol=.(rtol));
+                           m <- nlmixr::nlmeModList("m1")$run(theta, ev, inits, transit_abs=.(transit_abs), atol=.(atol), rtol=.(rtol),
+                                                              hmin=.(hmin), hmax=.(hmax), hini=.(hini), maxsteps = .(maxsteps),
+                                                              maxordn=.(maxordn), maxords=.(maxords));
                            if (is.null(dim(m))) m = t(as.matrix(m))
                            den <- if(is.null(nlmixr::nlmeModList("response.scaler"))) 1 else theta[nlmixr::nlmeModList("response.scaler")]
                            m[, nlmixr::nlmeModList("response")]/den
@@ -289,9 +291,7 @@ prepEv = function(dati, theta)
 #' @param par_trans function: calculation of PK parameters
 #' @param response names of the response variable
 #' @param response.scaler optional response variable scaler. default is NULL
-#' @param transit_abs a logical if transit absorption model is enabled
-#' @param atol atol (absolute tolerance for ODE-solver)
-#' @param rtol rtol (relative tolerance for ODE-solver)
+#' @inheritParams RxODE::rxSolve
 #' @param debugODE a logical if debugging is enabled
 #' @param mc.cores number of cores used in fitting (only for Linux)
 #' @param ... additional nlme options
@@ -359,7 +359,7 @@ prepEv = function(dati, theta)
 #'
 #'    The ODE specification mini-language is parsed with the help of
 #'    the open source tool \emph{DParser}, Plevyak (2015).
-#' @author Wenping Wang
+#' @author Wenping Wang, Mathew Fidler
 #' @examples
 #' \dontrun{
 #' library(nlmixr)
@@ -386,7 +386,9 @@ prepEv = function(dati, theta)
 nlme_ode <- function(dat.o, model, par_model, par_trans,
 	response, response.scaler=NULL,
 	transit_abs = FALSE,
-	atol=1.0e-8, rtol=1.0e-8,
+	atol = 1e-06, rtol=1.0e-4, maxsteps = 5000,
+        hmin = 0, hmax = NULL,
+        hini = 0, maxordn = 12, maxords = 5,
 	debugODE=FALSE, mc.cores=1, ...)
 {
   if (any(dat.o$EVID[dat.o$EVID>0]<101))
@@ -417,7 +419,9 @@ nlme_ode <- function(dat.o, model, par_model, par_trans,
     arg1 <- paste(names(s), collapse=", ")
     arg2 <- paste(unlist(lapply(names(s), function(x) paste(x,"=",x,"[sel][1]", sep=""))), collapse=", ")
 
-    nlmixr::nlmeModList("user_fn", nlme_ode_gen_usr_fn(arg1, arg2, transit_abs, atol, rtol, mc.cores));
+    nlmixr::nlmeModList("user_fn", nlme_ode_gen_usr_fn(arg1, arg2, transit_abs, atol, rtol,
+                                                       hmin, hmax, hini, maxordn, maxords, maxsteps,
+                                                       mc.cores));
 
     #data prep
     dat.g <- groupedData(DV~TIME|ID, subset(dat.o, dat.o$EVID==0))
@@ -640,6 +644,16 @@ focei.eta.nlmixr_nlme <- function(object, ...){
     }
 }
 
+fix.nlme.names <- function(n, uif){
+    n <- gsub(rex::rex(".(Intercept)"), "", n);
+    for (n2 in names(uif$cov.ref)){
+        cur <- uif$cov.ref[[n2]];
+        var <- paste(cur, n2, sep=".");
+        n <- gsub(var, names(cur), n)
+    }
+    n
+}
+
 ##' @rdname focei.theta
 focei.theta.nlmixr_nlme <- function(object, uif, ...){
     if (class(uif) == "function"){
@@ -649,6 +663,7 @@ focei.theta.nlmixr_nlme <- function(object, uif, ...){
     thetas <- rep(NA, length(n));
     names(thetas) <- n;
     f <- fixed.effects(object)
+    names(f) <- fix.nlme.names(names(f), uif);
     for (n in names(f)){
         thetas[n] <- f[n];
     }
@@ -711,7 +726,7 @@ as.focei.nlmixr_nlme <- function(object, uif, pt=proc.time(), ..., data){
                                     inits.mat=mat,
                                     cores=1,
                                     find.best.eta=FALSE,
-                                    numeric=(!is.null(uif$nmodel$lin.solved)),
+                                    ## numeric=(!is.null(uif$nmodel$lin.solved)),
                                     sum.prod=uif$env$sum.prod));
     ome <- fit.f$omega;
     w <- which(!is.na(uif.new$ini$neta1))
@@ -720,13 +735,40 @@ as.focei.nlmixr_nlme <- function(object, uif, pt=proc.time(), ..., data){
     }
     ## enclose the nlme fit in the .focei.env
     env <- attr(fit.f, ".focei.env");
+    dimnames(mat) <- list(NULL, uif$eta.names);
+    env$eta.df <- data.frame(ID=seq_along(mat[, 1]), as.data.frame(mat));
+    ## etas <- mat;
+    ## dimnames(etas) <- list(NULL, row.names(ome))
+    ## env$fit$etas.df <- data.frame(ID=seq_along(etas[1, ]), as.data.frame(etas))
     env$fit$nlme <- fit
     tmp <- cbind(data.frame(nlme=nlme.time["elapsed"]), env$fit$time);
     names(tmp) <- gsub("optimize", "FOCEi Evaulate", names(tmp))
     env$fit$time <- tmp;
+    eig <- try(eigen(object$apVar,TRUE,TRUE)$values, silent=TRUE);
+    eig2 <- try(eigen(object$varFix,TRUE,TRUE)$values, silent=TRUE);
+    if (!inherits(eig, "try-error")){
+        env$fit$eigen <- unlist(eig)
+        tmp <- sapply(env$fit$eigen, abs)
+        if (!inherits(eig2, "try-error")){
+            env$fit$eigen2 <- unlist(eig2)
+            tmp2 <- sapply(env$fit$eigen2, abs)
+            env$fit$condition.number <- max(c(max(tmp) / min(tmp), max(tmp2) / min(tmp2)));
+        } else {
+            env$fit$condition.number <- max(tmp) / min(tmp);
+        }
+    } else if (!inherits(eig2, "try-error")) {
+        env$fit$eigen2 <- unlist(eig2)
+        tmp2 <- sapply(env$fit$eigen2, abs)
+        env$fit$condition.number <- max(tmp2) / min(tmp2);
+    }
+    env$fit$varFix <- object$varFix
     env$uif <- uif;
     env$uif.new <- uif.new;
     class(fit.f) <- c("nlmixr.ui.nlme", class(fit.f))
+    if (fit.f$uif$.clean.dll){
+        nlme.cleanup(fit.f);
+        focei.cleanup(fit.f);
+    }
     return(fit.f)
 }
 
@@ -774,3 +816,11 @@ nlme.nlmixr.ui.nlme <- function(model, data, fixed, random = fixed,
 
 ##' @export
 nlme.nlmixr.ui.focei.fit <- nlme.nlmixr.ui.nlme
+
+
+nlme.cleanup <- function(x){
+    if (is(x, "nlmixr.ui.nlme")) x <- as.nlme(x);
+    if (exists("m1", x$env)){
+        RxODE::rxUnload(x$env$m1);
+    }
+}
