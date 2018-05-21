@@ -54,7 +54,15 @@ vpc <- function (sim, ...)
 ##' @rdname vpc
 ##' @export
 vpc.default <- function(sim, ...){
-    vpc::vpc(sim, ...)
+    ns <- loadNamespace("vpc");
+    if (exists("vpc_vpc",ns)){
+        vpcn <- "vpc_vpc"
+    } else {
+        vpcn <- "vpc"
+    }
+    call <- as.list(match.call(expand.dots=TRUE))[-1];
+    call <- call[names(call) %in% methods::formalArgs(getFromNamespace(vpcn,"vpc"))]
+    p = do.call(getFromNamespace(vpcn,"vpc"), call, envir = parent.frame(1))
 }
 
 #' Visual predictive check (VPC) for nlmixr nlme objects
@@ -64,6 +72,7 @@ vpc.default <- function(sim, ...){
 #' @param fit nlme fit object
 #' @param nsim number of simulations
 #' @param condition conditional variable
+#' @param ... Additional arguments
 #' @inheritParams vpc::vpc
 #' @return NULL
 #' @examples
@@ -71,7 +80,7 @@ vpc.default <- function(sim, ...){
 #' fit <- nlme_lin_cmpt(theo_md, par_model=specs, ncmt=1, verbose=TRUE)
 #' vpc(fit, nsim = 100, condition = NULL)
 #' @export
-vpc_nlmixr_nlme = function(fit, nsim=100, condition=NULL)
+vpc_nlmixr_nlme = function(fit, nsim=100, condition=NULL, ...)
 {
     nlmeModList(fit$env);
     on.exit({nlmeModList(new.env(parent=emptyenv()))})
