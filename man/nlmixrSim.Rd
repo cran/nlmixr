@@ -7,34 +7,22 @@
 \alias{solve.focei.fit}
 \title{Simulate a nlmixr solved system}
 \usage{
-nlmixrSim(object, events = NULL, inits = NULL, scale = NULL,
-  covs = NULL, method = c("liblsoda", "lsoda", "dop853"),
-  transit_abs = NULL, atol = 1e-06, rtol = 1e-04, maxsteps = 5000L,
-  hmin = 0L, hmax = NULL, hini = 0L, maxordn = 12L, maxords = 5L, ...,
-  cores, covs_interpolation = c("linear", "locf", "nocb", "midpoint"),
-  add.cov = FALSE, matrix = FALSE, sigma = NULL, sigmaDf = NULL,
-  nCoresRV = 1L, sigmaIsChol = FALSE, nDisplayProgress = 10000L,
-  amountUnits = NA_character_, timeUnits = "hours", stiff, theta = NULL,
-  eta = NULL, addDosing = FALSE, update.object = FALSE, do.solve = TRUE,
-  omega = NULL, omegaDf = NULL, omegaIsChol = FALSE, nSub = 1L,
-  thetaMat = NULL, thetaDf = NULL, thetaIsChol = FALSE, nStud = 1L,
-  dfSub = 0, dfObs = 0, return.type = c("rxSolve", "matrix",
-  "data.frame"), seed = NULL, nsim = NULL)
+nlmixrSim(object, ...)
 
 \method{rxSolve}{focei.fit}(object, params = NULL, events = NULL,
   inits = NULL, scale = NULL, covs = NULL, method = c("liblsoda",
-  "lsoda", "dop853"), transit_abs = NULL, atol = 1e-06, rtol = 1e-04,
+  "lsoda", "dop853"), transitAbs = NULL, atol = 1e-06, rtol = 1e-04,
   maxsteps = 5000L, hmin = 0L, hmax = NULL, hini = 0L, maxordn = 12L,
-  maxords = 5L, ..., cores, covs_interpolation = c("linear", "locf", "nocb",
-  "midpoint"), add.cov = FALSE, matrix = FALSE, sigma = NULL,
+  maxords = 5L, ..., cores, covsInterpolation = c("linear", "locf", "nocb",
+  "midpoint"), addCov = FALSE, matrix = FALSE, sigma = NULL,
   sigmaDf = NULL, nCoresRV = 1L, sigmaIsChol = FALSE,
   nDisplayProgress = 10000L, amountUnits = NA_character_,
   timeUnits = "hours", stiff, theta = NULL, eta = NULL,
-  addDosing = FALSE, update.object = FALSE, do.solve = TRUE,
-  omega = NULL, omegaDf = NULL, omegaIsChol = FALSE, nSub = 1L,
-  thetaMat = NULL, thetaDf = NULL, thetaIsChol = FALSE, nStud = 1L,
-  dfSub = 0, dfObs = 0, return.type = c("rxSolve", "matrix",
-  "data.frame"), seed = NULL, nsim = NULL)
+  addDosing = FALSE, updateObject = FALSE, doSolve = TRUE, omega = NULL,
+  omegaDf = NULL, omegaIsChol = FALSE, nSub = 1L, thetaMat = NULL,
+  thetaDf = NULL, thetaIsChol = FALSE, nStud = 1L, dfSub = 0,
+  dfObs = 0, returnType = c("rxSolve", "matrix", "data.frame"),
+  seed = NULL, nsim = NULL)
 
 \method{simulate}{focei.fit}(object, nsim = 1, seed = NULL, ...)
 
@@ -44,6 +32,15 @@ nlmixrSim(object, events = NULL, inits = NULL, scale = NULL,
 \item{object}{is a either a RxODE family of objects, or a file-name
 with a RxODE model specification, or a string with a RxODE
 model specification.}
+
+\item{...}{Other arguments including scaling factors for each
+compartment.  This includes S# = numeric will scale a compartment
+# by a dividing the compartment amount by the scale factor,
+like NONMEM.}
+
+\item{params}{a numeric named vector with values for every
+parameter in the ODE system; the names must correspond to the
+parameter identifiers used in the ODE specification;}
 
 \item{events}{an \code{eventTable} object describing the input
 (e.g., doses) to the dynamic system and observation sampling
@@ -76,7 +73,7 @@ is for time-varying covariates.}
         solving nor user Jacobain specification
 }}
 
-\item{transit_abs}{boolean indicating if this is a transit
+\item{transitAbs}{boolean indicating if this is a transit
 compartment absorption}
 
 \item{atol}{a numeric absolute tolerance (1e-8 by default) used
@@ -110,17 +107,12 @@ default value is determined by the solver (when hini = 0)}
 \item{maxords}{The maximum order to be allowed for the stiff (BDF)
 method.  The default value is 5.  This can be between 1 and 5.}
 
-\item{...}{Other arguments including scaling factors for each
-compartment.  This includes S# = numeric will scale a compartment
-# by a dividing the compartment amount by the scale factor,
-like NONMEM.}
-
 \item{cores}{Number of cores used in parallel ODE solving.  This
 defaults to the number or system cores determined by
 \code{\link{rxCores}} for methods that support parallel
 solving (ie thread-safe methods like "liblsoda").}
 
-\item{covs_interpolation}{specifies the interpolation method for
+\item{covsInterpolation}{specifies the interpolation method for
     time-varying covariates. When solving ODEs it often samples
     times outside the sampling time specified in \code{events}.
     When this happens, the time varying covariates are
@@ -137,7 +129,7 @@ solving (ie thread-safe methods like "liblsoda").}
   carried backward to midpoint.
 }}
 
-\item{add.cov}{A boolean indicating if covariates should be added
+\item{addCov}{A boolean indicating if covariates should be added
 to the output matrix or data frame. By default this is
 disabled.}
 
@@ -201,13 +193,13 @@ information and estimates at the doses.  Be default, RxODE
 only includes estimates at the observations. (default
 \code{FALSE}).}
 
-\item{update.object}{This is an internally used flag to update the
+\item{updateObject}{This is an internally used flag to update the
 RxODE solved object (when supplying an RxODE solved object) as
 well as returning a new object.  You probably should not
 modify it's \code{FALSE} default unless you are willing to
 have unexpected results.}
 
-\item{do.solve}{Internal flag.  By default this is \code{TRUE},
+\item{doSolve}{Internal flag.  By default this is \code{TRUE},
 when \code{FALSE} a list of solving options is returned.}
 
 \item{omega}{Named omega matrix.}
@@ -244,19 +236,17 @@ inverse Wishart distribution (scaled) or scaled inverse chi squared distribution
 \item{dfObs}{Degrees of freedom to sample the unexplained variaiblity matrix from the 
 inverse Wishart distribution (scaled) or scaled inverse chi squared distribution.}
 
-\item{return.type}{This tells what type of object is returned.  The currently supported types are:
+\item{returnType}{This tells what type of object is returned.  The currently supported types are:
 \itemize{
 \item \code{"rxSolve"} (default) will return a reactive data frame
      that can change easily change different pieces of the solve and
      update the data frame.  This is the currently standard solving
      method in RxODE,  is used for \code{rxSolve(object, ...)}, \code{solev(object,...)},
 \item \code{"data.frame"} -- returns a plain, non-reactive data
-     frame; Currently very slightly Faster than \code{return.type=\"matrix\"}
+     frame; Currently very slightly Faster than \code{returnType=\"matrix\"}
 \item \code{"matrix"} -- returns a plain matrix with column names attached
-    to the solved object.  This is what is used \code{eobject$run} as well as ob
-}
-
-    \code{return.type} equals {matrix}, rxSolve returns a matrix.}
+    to the solved object.  This is what is used \code{object$run} as well as \code{object$solve}
+}}
 
 \item{seed}{an object specifying if and how the random number
     generator should be initialized (\sQuote{seeded}).\cr
@@ -268,11 +258,9 @@ inverse Wishart distribution (scaled) or scaled inverse chi squared distribution
     \code{"seed"} attribute, see \sQuote{Value}.
   }
 
-\item{nsim}{represents the number of simulations.  For RxODE, if you supply single subject event tables (created with eventTable)}
-
-\item{params}{a numeric named vector with values for every
-parameter in the ODE system; the names must correspond to the
-parameter identifiers used in the ODE specification;}
+\item{nsim}{represents the number of simulations.  For RxODE, if
+you supply single subject event tables (created with
+eventTable)}
 
 \item{a}{when using \code{solve}, this is equivalent to the
 \code{object} argument.  If you specify \code{object} later in

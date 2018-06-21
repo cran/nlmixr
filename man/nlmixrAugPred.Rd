@@ -5,7 +5,7 @@
 \alias{augPred.focei.fit}
 \title{Augmented Prediction for nlmixr fit}
 \usage{
-nlmixrAugPred(object, ..., covs_interpolation = c("linear", "locf", "nocb",
+nlmixrAugPred(object, ..., covsInterpolation = c("linear", "locf", "nocb",
   "midpoint"), primary = NULL, minimum = NULL, maximum = NULL,
   length.out = 51L)
 
@@ -18,7 +18,7 @@ nlmixrAugPred(object, ..., covs_interpolation = c("linear", "locf", "nocb",
 \item{...}{some methods for the generic may require additional
    arguments.}
 
-\item{covs_interpolation}{specifies the interpolation method for
+\item{covsInterpolation}{specifies the interpolation method for
     time-varying covariates. When solving ODEs it often samples
     times outside the sampling time specified in \code{events}.
     When this happens, the time varying covariates are

@@ -612,7 +612,7 @@ nsis <- function(){ ## build installer...
 ##' @param expr R expression
 ##' @return The value of the expression
 ##' @author Matthew L. Fidler
-collectWarnings <- function(expr){
+.collectWarnings <- function(expr){
     ws <- c();
     this.env <- environment()
     ret <- suppressWarnings(withCallingHandlers(expr,warning=function(w){assign("ws", unique(c(w$message, ws)), this.env)}))
@@ -639,4 +639,10 @@ nlmixrPrint <- function(x, ...){
     this.env <- environment();
     message(invisible(paste(R.utils::captureOutput(assign("x", print(x, ...), this.env)), collapse="\n")), appendLF=TRUE);
     invisible(x)
+}
+
+.dontRun <- function(...){
+    ## This is for r checks, though they need to be loaded...
+    vpc::vpc(...)
+    dparser::dparse(...)
 }
