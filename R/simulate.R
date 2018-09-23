@@ -31,13 +31,20 @@
 }
 
 .simInfo <- function(object){
-    .mod <- gsub("rx_pred_~", "ipred=",
-                 gsub("rx_r_~.*;", "",
-                      gsub(rex::rex("(0)~"), "(0)=",
-                          gsub("=", "~", RxODE::rxNorm(object$model$pred.only), perl=TRUE))));
+    .mod <- RxODE::rxNorm(object$model$pred.only)
+    .mod <- gsub(rex::rex("d/dt(", capture(except_any_of("\n;)")), ")", or("=", "~")), "d/dt(\\1)~", .mod);
+    .lhs <- object$model$pred.only$lhs
+    .lhs <- .lhs[.lhs != "rx_pred_"];
+    .lhs <- .lhs[.lhs != "rx_r_"];
+    .omega <- object$omega
+    .etaN <- dimnames(.omega)[[1]]
     .params <- nlme::fixed.effects(object);
     .thetaN <- names(.params);
-    .sim <- "\nsim=ipred"
+    .newMod <- paste0(gsub(rex::rex(capture(or(.lhs)), or("=", "~"), except_any_of("\n;"),any_of("\n;")), "",
+                           gsub(rex::rex(capture(or("rx_pred_", "rx_r_")), or("=", "~")), "\\1~",
+                                .repThetaEta(.mod, theta=.thetaN, eta=.etaN))),
+                      "ipred=rxTBSi(rx_pred_, rx_lambda_, rx_yj_);");
+    .sim <- "\nsim=rxTBSi(rx_pred_+rx_r_"
     .err <- object$uif$err;
     .w <- which(!is.na(object$uif$err))
     .mat <- diag(length(.w))
@@ -46,28 +53,66 @@
         .ntheta <- object$uif$ini$ntheta[.w[.i]]
         .cur <- .thetaN[.ntheta];
         .dimn[.i] <- .cur;
-        if (.err[.w[.i]] == "add"){
-            .sim <- paste0(.sim, "+", .cur);
+        if (any(.err[.w[.i]] == c("add", "norm", "dnorm", "lnorm", "dlnorm", "logn"))){
+            ## .sim <- paste0(.sim, "+", .cur);
             .mat[.i, .i] <- .params[.ntheta] ^ 2;
             .params[.ntheta] <- NA_real_;
         } else if (.err[.w[.i]] == "prop"){
-            .sim <- paste0(.sim, "+ipred*", .cur);
+            ## .sim <- paste0(.sim, "+ipred*", .cur);
+            .mat[.i, .i] <- .params[.ntheta] ^ 2;
+            .params[.ntheta] <- NA_real_;
+        } else if (.err[.w[.i]] == "pow"){
+            ## .sim <- paste0(.sim, "+", .cur, "*ipred^(", object$uif$ini$name[which(object$uif$ini$err == "pow2")], ")");
             .mat[.i, .i] <- .params[.ntheta] ^ 2;
             .params[.ntheta] <- NA_real_;
         }
     }
     .params <- .params[!is.na(.params)]
     dimnames(.mat) <- list(.dimn, .dimn);
+    .w <- which(!(.dimn %in% names(.params)))
+    .mat <- .mat[.w, .w, drop = FALSE]
     .sigma <- .mat;
-    .mod <- paste0(.mod, "\n", .sim);
-    .omega <- object$omega
-    .etaN <- dimnames(.omega)[[1]]
-    .newMod <- .repThetaEta(.mod, theta=.thetaN, eta=.etaN);
-    .params <- .params[-.w];
-    .dfObs <- nobs(object);
+    .sigmaNames <- dimnames(.mat)[[1]]
+    .newMod <- paste0(.newMod, .sim, ", rx_lambda_, rx_yj_);\n");
+    .newMod <- strsplit(.newMod, "\n")[[1]];
+    .w <- which(regexpr("rx_r_~", .newMod) != -1);
+    .subs <- function(x, .what, .with){
+        if (all(as.character(x) == .what)){
+            return(eval(parse(text=sprintf("quote(%s)", .with))));
+        } else if (is.call(x)) {
+            as.call(lapply(x, .subs, .what=.what, .with=.with))
+        } else if (is.pairlist(x)) {
+            as.pairlist(lapply(x, .subs, .what=.what, .with=.with))
+        } else {
+            return(x);
+        }
+    }
+    for (.i in .w){
+        .cur <- sub(";", "", sub("rx_r_~", "", .newMod[.i]))
+        .cur <- eval(parse(text=sprintf("RxODE::rxSplitPlusQ(quote(%s))", .cur)))
+        .cur <- paste(sapply(.cur, function(x){
+            .ret <- sprintf("sqrt(%s)", x)
+            for (.what in .sigmaNames){
+                .with <- "1"
+                .old <- paste(deparse(eval(parse(text=sprintf("quote(%s)", .ret)))), collapse="")
+                .new <- paste(deparse(eval(parse(text=sprintf(".subs(quote(%s),.what=%s,.with=%s)", .ret,
+                                                              deparse(.what), deparse(.with))))), collapse="")
+                if (.old != .new){
+                    .ret <- sprintf("%s*%s", .what, .new);
+                }
+            }
+            return(.ret)
+        }), collapse="+");
+        .cur <- gsub("  +", " ", .cur);
+        .cur <- gsub(rex::rex("*sqrt(Rx_pow_di(1, 2))"), "", .cur)
+        .cur <- gsub(rex::rex("Rx_pow_di(1, 2)", any_spaces, "*", any_spaces), "", .cur)
+        .newMod[.i] <- paste0("rx_r_~", .cur, ";");
+    }
+    .newMod <- paste(paste(.newMod, collapse="\n"), "\n");
+    .dfObs <- object$nobs;
     .nlmixrData <- nlmixr::nlmixrData(nlme::getData(object))
     .dfSub <- length(unique(.nlmixrData$ID));
-    .thetaMat <- object$varFix;
+    .thetaMat <- nlme::getVarCov(object);
     return(list(rx=.newMod, params=.params, events=.nlmixrData,
                 thetaMat=.thetaMat, omega=.omega, sigma=.sigma, dfObs=.dfObs, dfSub=.dfSub))
 }
@@ -76,35 +121,50 @@
 ##' Simulate a nlmixr solved system
 ##'
 ##' This takes the uncertainty in the model parameter estimates and to
-##' simulate a number of "studies".  Each study simulates a
+##' simulate a number of theoretical studies.  Each study simulates a
 ##' realization of the parameters from the uncertainty in the fixed
 ##' parameter estimates.  In addition the omega and sigma matrices are
 ##' simulated from the uncertainty in the Omega/Sigma matrices based
 ##' on the number of subjects and observations the model was based on.
 ##'
+##' @param object nlmixr object
+##' @param ... Other arguments sent to \code{rxSolve}
 ##' @inheritParams RxODE::rxSolve
-##'
 ##' @export
 nlmixrSim <- function(object, ...){
-    ## Get around lazy evaluation issues.
     .si <- .simInfo(object);
-
-    message("Compiling model...", appendLF=FALSE)
+    .xtra <- list(...)
+    if (any(names(.xtra) == "rx")){
+        .si$rx <- .xtra$rx
+    }
+    if (!is.null(.xtra$modelName)){
+        message(sprintf("Compiling %s model...", .xtra$modelName), appendLF=FALSE)
+    } else {
+        message("Compiling model...", appendLF=FALSE)
+    }
     .newobj <- RxODE::RxODE(.si$rx);
     on.exit({RxODE::rxUnload(.newobj)});
     message("done");
-    .xtra <- list(...)
-    if (any(names(.xtra) == "dfObs")){
-        .si$dfObs <- .xtra$dfObs;
-    }
-    if (any(names(.xtra) == "dfSub")){
-        .si$dfSub <- .xtra$dfSub
-    }
-    if (any(names(.xtra) == "nStud") && .xtra$nStud <= 1){
+    if ((any(names(.xtra) == "nStud") && .xtra$nStud <= 1) || !any(names(.xtra) == "nStud")){
         .si$thetaMat <- NULL;
-    } else if (any(names(.xtra) == "thetaMat")){
-        .si$thetaMat <- .xtra$thetaMat;
+        .si$dfSub <- NULL;
+        .si$dfObs <- NULL;
+    } else {
+        if (RxODE::rxIs(.xtra$thetaMat, "matrix")){
+            .si$thetaMat <- .xtra$thetaMat;
+        } else if (!is.null(.xtra$thetaMat)){
+            if (is.na(.xtra$thetaMat)){
+                .si$thetaMat <- NULL
+            }
+        }
+        if (any(names(.xtra) == "dfSub")){
+            .si$dfSub <- .xtra$dfSub
+        }
+        if (any(names(.xtra) == "dfObs")){
+            .si$dfObs <- .xtra$dfObs;
+        }
     }
+
 
     if (any(names(.xtra) == "omega")){
         .si$omega <- .xtra$omega;
@@ -116,41 +176,97 @@ nlmixrSim <- function(object, ...){
         RxODE::rxIs(.xtra$events, "rx.event")){
         .si$events <- .xtra$events;
     }
+    if (any(names(.xtra) == "params")){
+        .si$params <- .xtra$params;
+    }
     .xtra$object <- .newobj;
     .xtra$params <- .si$params;
     .xtra$events <- .si$events;
-    .xtra$thetaMat <- .si$thetaMat;
+    if (RxODE::rxIs(.xtra$thetaMat, "matrix")){
+        .xtra$thetaMat <- NULL;
+    } else {
+        .xtra$thetaMat <- .si$thetaMat;
+    }
     .xtra$dfObs <- .si$dfObs
     .xtra$omega <- .si$omega;
     .xtra$dfSub <- .si$dfSub
     .xtra$sigma <- .si$sigma;
-    do.call(getFromNamespace("rxSolve", "RxODE"), .xtra, envir=parent.frame(2))
+    .ret <- do.call(getFromNamespace("rxSolve", "RxODE"), .xtra, envir=parent.frame(2))
+    if (inherits(.ret, "rxSolve")){
+        .rxEnv <- attr(class(.ret),".RxODE.env")
+        if (!is.null(.xtra$nsim)){
+            .rxEnv$nSub <- .xtra$nsim
+        }
+        if (!is.null(.xtra$nSub)){
+            .rxEnv$nSub <- .xtra$nSub
+        }
+        if (is.null(.xtra$nStud)){
+            .rxEnv$nStud <- 1;
+        } else {
+            .rxEnv$nStud <- .xtra$nStud
+        }
+        .cls <- c("nlmixrSim", class(.ret));
+        attr(.cls, ".RxODE.env") <- .rxEnv
+        class(.ret) <- .cls
+    }
+    return(.ret)
 }
+
+##' @export
+plot.nlmixrSim <- function(x, y, ...){
+    p1 <-eff <-Percentile <-sim.id <-id <-p2 <-p50 <-p05 <- p95 <- . <- NULL
+    .args <- list(...)
+    RxODE::rxReq("dplyr")
+    RxODE::rxReq("tidyr")
+    if (is.null(.args$p)){
+        .p <- c(0.05, 0.5, 0.95)
+    } else {
+        .p <- .args$p;
+    }
+    if (x$env$nStud <= 1){
+        if (x$env$nSub < 2500){
+            warning("In order to put confidence bands around the intervals, you need at least 2500 simulations.")
+            message("Summarizing data for plot")
+            .ret <- x %>% dplyr::group_by(time) %>%
+                dplyr::do(data.frame(p1=.p, eff=quantile(.$sim, probs=.p))) %>%
+                dplyr::mutate(Percentile=factor(sprintf("%02d%%",round(p1*100))))
+            message("done.")
+            .ret <- ggplot2::ggplot(.ret,aes(time,eff,col=Percentile,fill=Percentile)) +
+                ggplot2::geom_line(size=1.2)
+            return(.ret)
+        } else {
+            .n <- round(sqrt(x$env$nSub));
+        }
+    } else {
+        .n <- x$env$nStud;
+    }
+    message("Summarizing data for plot")
+    .ret <- x %>% dplyr::mutate(id=sim.id%%.n) %>% dplyr::group_by(id,time) %>%
+        dplyr::do(data.frame(p1=.p, eff=quantile(.$sim, probs=.p)))%>%
+        dplyr::group_by(p1,time) %>%
+        dplyr::do(data.frame(p2=.p, eff=quantile(.$eff, probs=.p))) %>%
+        dplyr::ungroup()  %>% dplyr::mutate(p2=sprintf("p%02d",(p2*100)))%>%
+        tidyr::spread(p2,eff) %>% dplyr::mutate(Percentile=factor(sprintf("%02d%%",round(p1*100))));
+    message("done.")
+    .ret <- ggplot2::ggplot(.ret,aes(time,p50,col=Percentile,fill=Percentile)) +
+        ggplot2::geom_ribbon(aes(ymin=p05,ymax=p95),alpha=0.5)+
+        ggplot2::geom_line(size=1.2)
+    return(.ret);
+}
+
+
 ##' Predict a nlmixr solved system
 ##'
 ##' @param ipred Flag to calculate individual predictions. When
 ##'     \code{ipred} is \code{TRUE}, calculate individual predictions.
 ##'     When \code{ipred} is \code{FALSE}, set calculate typical population predations.
-##'     When \code{ipred} is \code{NA}, calculateboth individual and
+##'     When \code{ipred} is \code{NA}, calculate both individual and
 ##'     population predictions.
 ##'
 ##' @inheritParams RxODE::rxSolve
 ##'
 ##' @export
-nlmixrPred <- function(object, params=NULL, events=NULL, inits = NULL, scale = NULL,
-                       covs = NULL, method = c("liblsoda", "lsoda", "dop853"),
-                       transitAbs = NULL, atol = 1.0e-6, rtol = 1.0e-4,
-                       maxsteps = 5000L, hmin = 0L, hmax = NULL, hini = 0L, maxordn = 12L, maxords = 5L, ...,
-                       cores, covsInterpolation = c("linear", "locf", "nocb", "midpoint"),
-                       addCov = FALSE, matrix = FALSE, sigma = NULL, sigmaDf = NULL,
-                       nCoresRV = 1L, sigmaIsChol = FALSE, nDisplayProgress=10000L,
-                       amountUnits = NA_character_, timeUnits = "hours", stiff,
-                       theta = NULL, eta = NULL, addDosing=FALSE, updateObject=FALSE,doSolve=TRUE,
-                       omega = NULL, omegaDf = NULL, omegaIsChol = FALSE,
-                       nSub = 1L, thetaMat = NULL, thetaDf = NULL, thetaIsChol = FALSE,
-                       nStud = 1L, dfSub=0.0, dfObs=0.0, returnType=c("data.frame", "rxSolve", "matrix"),
-                       seed=NULL, nsim=NULL,
-                       ipred=FALSE){
+nlmixrPred <- function(object, ..., ipred=FALSE){
     lst <- as.list(match.call()[-1]);
     if (RxODE::rxIs(lst$params, "rx.event")){
         if (!is.null(lst$events)){
@@ -193,7 +309,6 @@ nlmixrPred <- function(object, params=NULL, events=NULL, inits = NULL, scale = N
         pred.par <- c(params, setNames(rep(0, neta + 1), c(sprintf("ETA[%d]", seq(1, neta)), "rx_err_")));
     }
     on.exit({RxODE::rxUnload(lst$object)});
-    lst$returnType <- match.arg(returnType);
     if (!is.na(ipred)){
         if (do.pred){
             lst$params <- pred.par
@@ -215,7 +330,7 @@ nlmixrPred <- function(object, params=NULL, events=NULL, inits = NULL, scale = N
 }
 ##' @rdname nlmixrPred
 ##' @export
-predict.focei.fit <- function(object, ...){
+predict.nlmixrFitData <- function(object, ...){
     nlmixrPred(object, ...)
 }
 
@@ -227,9 +342,10 @@ predict.focei.fit <- function(object, ...){
 ##' @inheritParams RxODE::rxSolve
 ##' @return Stacked data.frame with observations, individual/population predictions.
 ##' @author Matthew L. Fidler
+##' @export
 nlmixrAugPred <- function(object, ..., covsInterpolation = c("linear", "locf", "nocb", "midpoint"),
                           primary=NULL, minimum = NULL, maximum = NULL, length.out = 51L){
-    if (!inherits(object, "focei.fit")){
+    if (!inherits(object, "nlmixrFitData")){
         stop("Need a nlmixr fit object")
     }
     uif <- object$uif
@@ -290,7 +406,7 @@ nlmixrAugPred <- function(object, ..., covsInterpolation = c("linear", "locf", "
 
 ##' @rdname nlmixrAugPred
 ##' @export
-augPred.focei.fit <- function(object, primary = NULL, minimum = min(primary), maximum = max(primary),
+augPred.nlmixrFitData <- function(object, primary = NULL, minimum = min(primary), maximum = max(primary),
                               length.out = 51, ...){
     lst <- as.list(match.call()[-1])
     ret <- do.call("nlmixrAugPred", lst, envir=parent.frame(2))
@@ -316,7 +432,7 @@ plot.nlmixrAugPred <- function(x, y, ...){
 
 ##' @rdname nlmixrSim
 ##' @export
-rxSolve.focei.fit <- function(object, params=NULL, events=NULL, inits = NULL, scale = NULL,
+rxSolve.nlmixrFitData <- function(object, params=NULL, events=NULL, inits = NULL, scale = NULL,
                               covs = NULL, method = c("liblsoda", "lsoda", "dop853"),
                               transitAbs = NULL, atol = 1.0e-6, rtol = 1.0e-4,
                               maxsteps = 5000L, hmin = 0L, hmax = NULL, hini = 0L, maxordn = 12L, maxords = 5L, ...,
@@ -334,13 +450,13 @@ rxSolve.focei.fit <- function(object, params=NULL, events=NULL, inits = NULL, sc
 
 ##' @rdname nlmixrSim
 ##' @export
-simulate.focei.fit <- function(object, nsim=1, seed=NULL, ...){
+simulate.nlmixrFitData <- function(object, nsim=1, seed=NULL, ...){
     nlmixr::nlmixrSim(object, ..., nsim=nsim, seed=seed)
 }
 
 ##' @rdname nlmixrSim
 ##' @export
-solve.focei.fit <- function(a, b, ...){
+solve.nlmixrFitData <- function(a, b, ...){
     lst <- as.list(match.call()[-1])
     n <- names(lst)
     if (!missing(a)){

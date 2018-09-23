@@ -68,6 +68,7 @@ vec user_function(const mat &phi, const mat &evt, const List &opt) {
   vec id = evt.col(0);
   mat wm;
   vec wv;
+  int DEBUG = opt["DEBUG"];
 
   ix = find(evt.col(2) == 0);
   vec yp(ix.n_elem);
@@ -80,6 +81,10 @@ vec user_function(const mat &phi, const mat &evt, const List &opt) {
 <%=assgnPars%>
 
     wm = evt.rows( find(id == i) );
+    if(wm.n_rows==0) {
+      Rcout << "ID = " << i+1 << " has no data. Please check." << endl;
+      arma_stop_runtime_error("");
+    }
 
     vec time__;
     time__ = wm.col(1);
@@ -87,9 +92,12 @@ vec user_function(const mat &phi, const mat &evt, const List &opt) {
     wv = wm.col(2);
     ivec evid(ntime);
     for (int k=0; k<ntime; ++k) evid(k) = wv(k);
+    wv = wm.col(4);
+    ivec cmt(ntime);
+    for (int k=0; k<ntime; ++k) cmt(k) = wv(k);
+    wv = wm.col(3);
     vec amt;
-    amt = wm.col(3);
-    amt = amt( find(evid > 0) );
+    amt = wv( find(evid > 0) );
 
     int neq=as<int>(opt["neq"]);
     vec inits(neq);
@@ -109,25 +117,53 @@ vec user_function(const mat &phi, const mat &evt, const List &opt) {
 
     mat ret(neq, ntime);
     mat lhs(nlhs, ntime);
+
 	<%=ode_solver%>(&neq, params.memptr(), time__.memptr(),
 	    evid.memptr(), &ntime, inits.memptr(), amt.memptr(), ret.memptr(),
 	    &atol, &rtol, &stiff, &transit_abs, &nlhs, lhs.memptr(), &rc);
+
+    if ( DEBUG > 4 && rc != 0 ) {
+        Rcout << "pars: " << params.t();
+        Rcout << "inits: " << inits.t();
+        Rcout << "LSODA return code: " << rc << endl;
+        Rcout << wm << endl;
+    }
 	ret = join_cols(join_cols(time__.t(), ret), lhs).t();
-	ret = ret.rows( find(evid == 0) );
+	uvec r  = find(evid == 0);
+	ret = ret.rows(r);
+	ivec cmtObs = cmt(r);
 
 <%=model_vars_decl%>
 
-vec g;
-g = <%=pred_expr%>;
+mat g(time.n_elem, <%=nendpnt%>);
+<%=pred_expr%>
+
 if (g.has_nan()) {
-	Rcout <<"WARNING: NAN in pred" << endl;
-	Rcout  << i << params << endl;
-	Rcout << join_rows(time,g) << endl;
-	Rcout << "Consider to relax atol & rtol" << endl;
-	g.replace(datum::nan, 1.0e9);
+	Rcout << "NaN in prediction. Consider to: relax atol & rtol; change initials; change seed; change structure model." << endl;
+    if ( DEBUG > 4) {
+	Rcout << "pars: " << params.t();
+	Rcout << "inits: " << inits.t();
+	Rcout << "LSODA code: " << rc << endl;
+	Rcout << "input data:" << endl;
+	Rcout << wm;
+	Rcout << "LSODA solutions:" << endl;
+	Rcout << ret << endl;
+	}
+	g.replace(datum::nan, 1.0e99);
 }
 
-    int no = g.n_elem;
+int nendpnt = <%=nendpnt%>;
+uvec cmt_endpnt = opt["cmt_endpnt"];
+uvec b0(1), b1(1); b0(0) = 0;
+
+for (int b=1; b<nendpnt; ++b) {
+  b1(0) = b;
+  uvec r;
+  r = find( cmtObs==cmt_endpnt(b) );
+  g.submat(r, b0) = g.submat(r, b1);
+}
+
+    int no = cmtObs.n_elem;
     memcpy(p, g.memptr(), no*sizeof(double));
     p += no;
   }
@@ -164,6 +200,8 @@ BEGIN_RCPP
   saem.saem_fit();
 
   List out = List::create(
+    Named("resMat") = saem.get_resMat(),
+    Named("mprior_phi") = saem.get_mprior_phi(),
     Named("mpost_phi") = saem.get_mpost_phi(),
     Named("Gamma2_phi1") = saem.get_Gamma2_phi1(),
     Named("Plambda") = saem.get_Plambda(),
@@ -303,6 +341,8 @@ BEGIN_RCPP
   saem.saem_fit();
 
   List out = List::create(
+    Named("resMat") = saem.get_resMat(),
+    Named("mprior_phi") = saem.get_mprior_phi(),
     Named("mpost_phi") = saem.get_mpost_phi(),
     Named("Gamma2_phi1") = saem.get_Gamma2_phi1(),
     Named("Plambda") = saem.get_Plambda(),
@@ -392,7 +432,11 @@ gen_saem_user_fn = function(model, PKpars=attr(model, "default.pars"), pred=NULL
 
     x = deparse(body(pred))
     len = length(x)
-    pred_expr = if(len>2) x[2:(len-1)] else x
+    x = if(x[1]=="{") x[2:(len-1)] else x
+    len = length(x)
+    nendpnt = len
+    pred_expr = paste(paste("g.col(", 1:len-1, ") = ", x, ";", sep=""), collapse="\n")
+
   } else {
 	neq = nlhs = 0
 	pars = model
@@ -456,7 +500,8 @@ gen_saem_user_fn = function(model, PKpars=attr(model, "default.pars"), pred=NULL
   cat(make_str, file="Makevars")
   cat(make_str)
 
-  shlib = sprintf('R CMD SHLIB %s -o %s', saem.cpp, saem.dll)
+  rexec = paste(R.home(component="bin"), .Platform$file.sep, "R", sep="")
+  shlib = sprintf('%s CMD SHLIB %s -o %s', rexec, saem.cpp, saem.dll)
   ## shlib = sprintf(shlib, system.file("include/neldermead.cpp", package = "nlmixr"))
   do.call("system", list(shlib))
   file.copy(file.path(.wd, saem.dll), file.path(lwd, saem.dll));
@@ -488,6 +533,7 @@ gen_saem_user_fn = function(model, PKpars=attr(model, "default.pars"), pred=NULL
   attr(fn, "saem.cpp") = saem.cpp
   attr(fn, "rx") = if(is.ode) model else ""
   attr(fn, "inPars") = inPars
+  if(is.ode) attr(fn, "nendpnt") = nendpnt
   reg.finalizer(env, saem.cleanup, onexit=TRUE); ## remove dlls on gc or proper exit of R.
   fn
 }
@@ -500,10 +546,10 @@ gen_saem_user_fn = function(model, PKpars=attr(model, "default.pars"), pred=NULL
 saem.cleanup <- function(env){
     if (is(env, "nlmixr.ui.saem")) env <- as.saem(env)
     if (is(env, "saemFit")) env <- attr(env, "env");
-    if (env$is.ode) RxODE::rxUnload(env$model)
+    if (env$is.ode) try({RxODE::rxUnload(env$model)}, silent=TRUE)
     try({dyn.unload(env$saem.dll)}, silent=TRUE);
-    if (file.exists(env$saem.dll))
-        unlink(env$saem.dll);
+    ## if (file.exists(env$saem.dll))
+    ##     unlink(env$saem.dll);
     if (file.exists(env$saem.cpp))
         unlink(env$saem.cpp);
 }
@@ -572,61 +618,6 @@ lincmt = function(ncmt, oral=T, tlag=F, infusion=F, parameterization=1) {
 	pars
 }
 
-
-#' Plot an SAEM model fit
-#'
-#' Plot an SAEM model fit
-#'
-#' @param x a saemFit object
-#' @param ... others
-#' @return a list
-#' @export
-plot.saemFit = function(x, ...)
-{
-    fit = x
-    saem.cfg = attr(fit, "saem.cfg")
-    dat = as.data.frame(saem.cfg$evt)
-    dat = cbind(dat[dat$EVID == 0, ], DV = saem.cfg$y)
-
-    df = rbind(cbind(dat, grp = 1), cbind(dat, grp = 2))
-    dopred <- attr(x, "dopred");
-    yp = dopred(fit$mpost_phi, saem.cfg$evt, saem.cfg$opt)
-    df$DV[df$grp == 2] = yp
-
-    p4 = ggplot(subset(df, grp==1), aes(TIME, DV)) +
-        geom_point() +
-        facet_wrap(~ID) +
-        geom_line(aes(TIME, DV), subset(df, grp==2), col='red')
-
-    df = cbind(dat, IPRED=yp)
-    df$IRES = df$DV - df$IPRED
-
-    p2 = ggplot(df, aes(IPRED, DV)) +
-        geom_point() +
-        geom_abline(intercept = 0, slope=1, col='red')
-
-    p3 = ggplot(df, aes(IPRED, IRES)) +
-        geom_point() +
-        geom_abline(intercept = 0, slope=0, col='red')
-
-    m = x$par_hist
-    df = data.frame(
-      val=as.vector(m),
-      par=rep(1:ncol(m), each=nrow(m)),
-      iter=rep(1:nrow(m), ncol(m))
-    )
-
-    p1 = ggplot2::ggplot(df, aes(iter, val)) +
-        ggplot2::geom_line() +
-        ggplot2::facet_wrap(~par, scales = "free_y")
-
-    print(p1)
-    print(p2)
-    print(p3)
-    print(p4)
-}
-
-
 #' Configure an SAEM model
 #'
 #' Configure an SAEM model by generating an input list to the SAEM model function
@@ -639,6 +630,7 @@ plot.saemFit = function(x, ...)
 #' @param seed seed for random number generator
 #' @param distribution one of c("normal","poisson","binomial")
 #' @param fixed a character vector of fixed effect only parameters (no random effects attached) to be fixed
+#' @param DEBUG Integer determining if debugging is enabled.
 #' @details
 #'    Fit a generalized nonlinear mixed-effect model by he Stochastic
 #'    Approximation Expectation-Maximization (SAEM) algorithm
@@ -693,7 +685,7 @@ configsaem <- function(model, data, inits,
 	mcmc=list(niter=c(200,300), nmc=3, nu=c(2,2,2)),
 	ODEopt = list(atol=1e-6, rtol=1e-4, stiff=1, transitAbs=0),
 	distribution=c("normal","poisson","binomial"),
-	seed=99, fixed=NULL)
+	seed=99, fixed=NULL, DEBUG=0)
 {
     names(ODEopt) <- gsub("transit_abs", "transitAbs", names(ODEopt));
 #mcmc=list(niter=c(200,300), nmc=3, nu=c(2,2,2));ODEopt = list(atol=1e-6, rtol=1e-4, stiff=1, transit_abs=0);distribution=c("normal","poisson","binomial");seed=99;data=dat;distribution=1;fixed=NULL
@@ -710,10 +702,12 @@ configsaem <- function(model, data, inits,
                  ninputpars=ninputpars, inPars=inPars)
 
   model$N.eta = attr(model$saem_mod, "nrhs")
+  model$nendpnt = attr(model$saem_mod, "nendpnt")
+  if (is.null(model$nendpnt)) model$nendpnt = 1
 
   if (is.null(model$log.eta)) model$log.eta = rep(TRUE, model$N.eta)
   if (is.null(model$omega)) model$omega = diag(model$N.eta)
-  if (is.null(model$res.mod)) model$res.mod = 1
+  if (is.null(model$res.mod)) model$res.mod = rep(1, model$nendpnt)
   if (is.null(inits$omega)) inits$omega = rep(1, model$N.eta)*4
   if (is.null(inits$ares)) inits$ares = 10
   if (is.null(inits$bres)) inits$bres = 1
@@ -736,6 +730,13 @@ configsaem <- function(model, data, inits,
   }
   s = subset(data$nmdat, EVID==0)
   data$data = as.matrix(s[,c("ID", "TIME", "DV", c(model$covars, inPars))])
+
+  ###  chk for no obs records
+  wh = setdiff(unique(data$nmdat$ID), unique(data$data[,"ID"]))
+  if (length(wh)) {
+      msg = paste0("No data with ID: ", paste(wh, collapse = ", "))
+      stop(msg)
+  }
 
   nphi = model$N.eta
   mcov = model$cov.mod
@@ -784,8 +785,10 @@ configsaem <- function(model, data, inits,
 
   y = data$data[,"DV"]
   id = data$data[,"ID"]
+  check = any(diff(unique(id))!=1)
+  if (check) stop("saem classic UI needs sequential ID. check your data")
   ntotal = length(id)
-    N = length(unique(id))
+  N = length(unique(id))
   covariables = if(is.null(model$covars)) NULL else unlist(stats::aggregate(as.data.frame(data$data[, model$covars]), list(id), unique)[,-1])
   if (!is.null(covariables)) dim(covariables) = c(N, data$N.covar)
   nb_measures = table(id)
@@ -807,7 +810,11 @@ configsaem <- function(model, data, inits,
     dim(optM$mPars) = c(nmc*N, ninputpars)
   }
 
-  dat = data$nmdat[,c("ID", "TIME", "EVID", "AMT")]		## CHECKME
+  if (is.null(data$nmdat$CMT)) data$nmdat$CMT = 1				## CHECKME
+  if (any(is.na(data$nmdat$CMT))) {
+    stop("'CMT' has NA(s)")
+  }
+  dat = data$nmdat[,c("ID", "TIME", "EVID", "AMT", "CMT")]		## CHECKME
   form = attr(model$saem_mod, "form")
   infusion = max(dat$EVID)>10000
   if (form=="cls" && infusion) {
@@ -1019,7 +1026,41 @@ configsaem <- function(model, data, inits,
     ilambda1 = as.integer(ilambda1),
     ilambda0 = as.integer(ilambda0)
   )
+
+
+  ## CHECKME
+  s = cfg$evt[cfg$evt[,"EVID"] == 0, "CMT"]
+  cfg$opt$cmt_endpnt = cfg$optM$cmt_endpnt = sort(unique(s))
+  cfg$nendpnt = length(unique(s))
+  if (model$nendpnt != cfg$nendpnt) {
+	  msg = sprintf("mis-match in nbr endpoints in model & in data")
+	  stop(msg)
+  }
+  t = unlist(split(1L:length(s), s))
+  cfg$ysM = rep(cfg$y[t], cfg$nmc)
+  cfg$ix_sorting = t - 1                            #c-index for sorting by endpnt
+  cfg$y_offset = c(0, cumsum(table(s)))
+  s = cfg$evtM[cfg$evtM[,"EVID"] == 0, "CMT"]
+  cfg$ix_endpnt = as.integer(as.factor(s)) - 1      #to derive vecares & vecbres
+  s = cfg$evtM[cfg$evtM[,"EVID"] == 0, "ID"]
+  t = cumsum(c(0,table(s)))
+  cfg$ix_idM = cbind(t[-length(t)], t[-1]-1)        #c-index of obs records of each subject
+
+  cfg$ares = rep(10, cfg$nendpnt)
+  cfg$bres = rep(1,  cfg$nendpnt)
+  cfg$ares[cfg$res.mod == 2] = 0
+  cfg$bres[cfg$res.mod == 1] = 0
+
+  nres = (1:2)[(cfg$res.mod==3)+1]
+  cfg$res_offset = cumsum(c(0, nres))
+  cfg$par.hist = matrix(0, cfg$niter, nlambda1 + nlambda0 + nphi1 + sum(nres))
+
+  cfg$DEBUG = cfg$opt$DEBUG = cfg$optM$DEBUG = DEBUG
+  cfg$phiMFile = tempfile()
+
+  cfg
 }
+
 
 reINITS = "^\\s*initCondition\\s*=\\s*c\\((?<inits>.+)\\)\\s*$"
 reDATAPAR = "^\\s*ParamFromData\\s*=\\s*c\\((?<inits>.+)\\)\\s*$"
@@ -1215,6 +1256,7 @@ fixef.saemFit <- function(object, ...){
 
 focei.theta.saemFit <- function(object, uif, ...){
     ## Get the thetas needed for FOCEi fit.
+    this.env <- environment()
     if (class(uif) == "function"){
         uif <- nlmixr(uif);
     }
@@ -1224,17 +1266,25 @@ focei.theta.saemFit <- function(object, uif, ...){
     for (n in names(sf)){
         thetas[n] <- sf[n];
     }
-    err <- abs(as.vector(object$sig2)) ## abs?
-    err.type <- uif$focei.err.type;
-    add <- which(err.type == "add")
-    prop <- which(err.type == "prop")
-    if (length(add) > 0){
-        thetas[add] <- err[1]; ## This seems to be SD;
-    }
-    if (length(prop) > 0){
-        thetas[prop] <- err[2]; ## This seems to be SD;
-    }
-    w <- which(is.na(thetas))[1];
+    ##(object$resMat)
+    ## print(object$resMat)
+    ## print(object$sig2)
+    .predDf <- uif$predDf;
+    .ini <- as.data.frame(uif$ini);
+    .resMat <- object$resMat;
+    sapply(seq_along(.predDf$cond), function(i){
+        x <- paste(.predDf$cond[i]);
+        .tmp <- .ini[which(.ini$condition == x), ];
+        .w <- which(sapply(.tmp$err, function(x)any(x == "prop")));
+        if (length(.w) == 1){
+            thetas[paste(.tmp$name[.w])]  <- .resMat[i, 2];
+        }
+        .w <- which(sapply(.tmp$err, function(x)any(x == c("add", "norm", "dnorm"))));
+        if (length(.w) == 1){
+            thetas[paste(.tmp$name[.w])] <- .resMat[i, 1];
+        }
+        assign("thetas", thetas, this.env)
+    })
     return(thetas)
 }
 
@@ -1281,9 +1331,16 @@ focei.eta.saemFit <- function(object, uif, ...){
     return(ome)
 }
 
-as.focei.saemFit <- function(object, uif, pt=proc.time(), ..., data){
+as.focei.saemFit <- function(object, uif, pt=proc.time(), ..., data, calcResid=TRUE, obf=NULL){
+    on.exit({RxODE::rxSolveFree()});
+    .saemTime <- proc.time() - pt;
     if (class(uif) == "function"){
         uif <- nlmixr(uif);
+    }
+    .dist <- ""
+    if (any(uif$saem.distribution == c("poisson", "binomial"))){
+        calcResid <- NA;
+        .dist <- uif$saem.distribution;
     }
     uif.new <- uif;
     fit <- object;
@@ -1295,18 +1352,13 @@ as.focei.saemFit <- function(object, uif, pt=proc.time(), ..., data){
             eta.trans[eta.trans >= i] <- eta.trans[eta.trans >= i] - 1
         }
     }
-    ## orig eta ->  new eta
     mat2 <- mat[, eta.trans, drop = FALSE];
-    ## for (i in seq_along(eta.trans)){
-    ##     ## i = old eta->  eta.trans[i] = saem.eta
-    ##     mat2[,i] <- mat[, eta.trans[i]];
-    ## }
     th <- focei.theta(fit, uif)
     for (n in names(th)){
         uif.new$est[uif.new$name == n] <- th[n];
     }
     ome <- focei.eta(fit, uif);
-    init <- list(THTA=th,
+    init <- list(THTA=as.vector(th),
                  OMGA=ome)
     saem.time <- proc.time() - pt;
     if (missing(data)){
@@ -1314,71 +1366,198 @@ as.focei.saemFit <- function(object, uif, pt=proc.time(), ..., data){
     } else {
         dat <- data;
     }
-    atol <- fit$env$uif$env$ODEopt$atol;
+    atol <- uif$env$ODEopt$atol;
     if(is.null(atol))atol <- 1e-6
-    rtol <- fit$env$uif$env$ODEopt$rtol;
+    rtol <- uif$env$ODEopt$rtol;
     if(is.null(rtol))rtol <- 1e-4
-    stiff <- fit$env$uif$env$ODEopt$stiff;
-    if(is.null(stiff))stiff <- 1L
-    transitAbs <- fit$env$uif$env$ODEopt$transitAbs;
+    .stiff <- uif$env$ODEopt$stiff;
+    if(is.null(.stiff)) .stiff <- 1L
+    if (.stiff == 1L) .method <- "lsoda"
+    if (.stiff == 0L) .method <- "dop853"
+    transitAbs <- uif$env$ODEopt$transitAbs;
     if(is.null(transitAbs)) transitAbs<- 0L
-    fit.f <- focei.fit.data.frame(data=dat,
-                                  inits=init,
-                                  PKpars=uif$theta.pars,
-                                  ## par_trans=fun,
-                                  model=uif$rxode.pred,
-                                  pred=function(){return(nlmixr_pred)},
-                                  err=uif$error,
-                                  lower=uif$focei.lower,
-                                  upper=uif$focei.upper,
-                                  theta.names=uif$focei.names,
-                                  eta.names=uif$eta.names,
-                                  control=list(NOTRUN=TRUE,
-                                               inits.mat=mat2,
-                                               cores=1,
-                                               find.best.eta=FALSE,
-                                               ## numeric=(!is.null(uif$nmodel$lin.solved)),
-                                               atol.ode=atol,
-                                               rtol.ode=rtol,
-                                               stiff=stiff,
-                                               transitAbs=transitAbs,
-                                               sum.prod=uif$env$sum.prod));
-    ome <- fit.f$omega;
-    w <- which(!is.na(uif.new$ini$neta1))
-    for (i in w){
-        uif.new$ini$est[i] <- ome[uif.new$ini$neta1[i], uif.new$ini$neta2[i]];
+    .tn <-uif$saem.theta.name;
+    .nth <- length(.tn)
+    .tmp <- try(chol(object$Ha[1:.nth,1:.nth]), silent=TRUE)
+    .addCov <- TRUE
+    .sqrtm <- FALSE
+    if (inherits(.tmp, "try-error")){
+        .tmp <- object$Ha[1:.nth,1:.nth]
+        .tmp <- try(RxODE::sqrtm(.tmp %*% t(.tmp)), silent=FALSE);
+        if (inherits(.tmp, "try-error")){
+            .addCov <- FALSE;
+        } else {
+            .sqrtm <- TRUE
+        }
+    } else {
+        .tmp <- object$Ha[1:.nth,1:.nth]
     }
-
-    ## enclose the nlme fit in the .focei.env
-    env <- attr(fit.f, ".focei.env");
-    dimnames(mat2) <- list(NULL, uif$eta.names);
-    env$eta.df <- data.frame(ID=seq_along(mat[, 1]), as.data.frame(mat2));
-    ## etas <- mat2;
-    ## dimnames(etas) <- list(NULL, row.names(ome))
-    ## env$etas.df <- data.frame(ID=seq_along(etas[1, ]), as.data.frame(etas))
-
-    env$fit$saem <- fit
-    tmp <- cbind(data.frame(saem=saem.time["elapsed"]), env$fit$time);
-    names(tmp) <- gsub("optimize", "Likelihood Calculation", names(tmp))
-    env$fit$time <- tmp;
-    env$uif <- uif;
-    env$uif.new <- uif.new;
-    eig <- try(eigen(object$Ha,TRUE,TRUE)$values, silent=TRUE);
-    if (!inherits(eig, "try-error")){
-        env$fit$eigen <- eigen(object$Ha,TRUE,TRUE)$values;
-        tmp <- sapply(fit.f$eigen, abs)
-        env$fit$condition.number <- max(tmp) / min(tmp);
+    .ini <- as.data.frame(uif$ini)
+    .ini <- .ini[is.na(.ini$err),]
+    .ini <- .ini[!is.na(.ini$ntheta),]
+    .ini <- paste(.ini$name);
+    if (.addCov){
+        .cov <- RxODE::rxInv(.tmp)
+        attr(.cov, "dimnames") <- list(.tn, .tn)
+        .cov <- .cov[.ini, .ini, drop = FALSE];
     }
-    nth <- length(uif$saem.theta.name)
-    tmp <- RxODE::rxInv(object$Ha[1:nth, 1:nth])
-    dimnames(tmp) <- list(uif$saem.theta.name, uif$saem.theta.name)
-    env$fit$varFix <- tmp
-    class(fit.f) <- c("nlmixr.ui.saem", class(fit.f))
-    if (uif$.clean.dll){
-        saem.cleanup(fit.f);
-        focei.cleanup(fit.f);
+    .ini <- as.data.frame(uif$ini)
+    .ini <- .ini[!is.na(.ini$ntheta),];
+    .skipCov <- !is.na(.ini$err);
+    .fixed <- uif$focei.fixed
+    .skipCov <- .skipCov | .fixed
+    .covMethod <- uif$env$covMethod
+    if (!any(.covMethod == c("r", "s", "r,s"))){
+        .covMethod <- "";
     }
-    return(fit.f)
+    if (is.na(calcResid)) .covMethod <- "";
+    .allThetaNames <- c(uif$saem.theta.name, uif$saem.omega.name, uif$saem.res.name);
+    .m <- object$par_hist;
+    if (ncol(.m) > length(.allThetaNames)){
+        .m <- .m[, seq_along(.allThetaNames)];
+    }
+    if (.dist == "binomial"){
+        .dist <- "bernoulli"
+    }
+    dimnames(.m) <- list(NULL, .allThetaNames);
+    .fixedNames <- paste(uif$ini$name[which(uif$ini$fix)]);
+    if (is.na(obf)){
+        .saemObf <- NA
+    } else if (is.null(obf)){
+        .saemObf <- calc.2LL(object);
+    } else if (is(obf, "logical")) {
+        if (is.na(obf)){
+            .saemObf <- NA;
+        } else if (obf){
+            .saemObf <- calc.2LL(object);
+        } else {
+            .saemObf <- NA
+        }
+    } else if (is(object, "numeric")){
+        .saemObf <- obf;
+    }
+    .notCalced <- TRUE;
+    while (.notCalced){
+        .env <- new.env(parent=emptyenv());
+        .env$method <- "SAEM";
+        .env$uif <- uif;
+        .env$saem <- object;
+        if (.addCov){
+            .env$cov <- .cov;
+        }
+        .env$parHistStacked <- data.frame(val=as.vector(.m),
+                                          par=rep(.allThetaNames, each=nrow(.m)),
+                                          iter=rep(1:nrow(.m), ncol(.m)));
+        .env$parHist <- data.frame(iter=rep(1:nrow(.m)), as.data.frame(.m));
+        if (length(.fixedNames) > 0){
+            .env$parHistStacked <- .env$parHistStacked[!(.env$parHistStacked$par %in% .fixedNames),, drop = FALSE];
+            .env$parHist <- .env$parHist[, !(names(.env$parHist) %in% .fixedNames), drop = FALSE];
+        }
+        if (is.na(calcResid)){
+            if (is.na(.saemObf)){
+                .env$extra <- paste0("(", crayon::italic(ifelse(is.null(uif$nmodel$lin.solved), "ODE", "Solved")),
+                                     " ",crayon::bold$blue(uif$saem.distribution), ") ",
+                                     crayon::blurred$italic("OBJF not calculated"))
+            } else {
+                .env$extra <- paste0("(", crayon::italic(ifelse(is.null(uif$nmodel$lin.solved), "ODE", "Solved")),
+                                     " ",crayon::bold$blue(uif$saem.distribution), "); ",
+                                     crayon::blurred$italic("OBJF by SAEM Gaussian quadrature"))
+            }
+            .env$theta <- data.frame(lower= -Inf, theta=init$THTA, upper=Inf, fixed=.fixed, row.names=uif$focei.names);
+            .env$fullTheta <- setNames(init$THTA, uif$focei.names)
+            .om0 <- .genOM(.parseOM(init$OMGA));
+            attr(.om0, "dimnames") <- list(uif$eta.names, uif$eta.names)
+            .env$omega <- .om0;
+            .env$etaObf <- data.frame(ID=seq_along(mat2[, 1]), setNames(as.data.frame(mat2), uif$eta.names), OBJI=NA);
+            .env$noLik <- FALSE;
+            .env$objective <- .saemObf;
+        } else if (calcResid){
+            .env$extra <- paste0("(", crayon::italic(ifelse(is.null(uif$nmodel$lin.solved), "ODE", "Solved")), "); ",
+                                 crayon::blurred$italic("OBJF calculated from FOCEi approximation"))
+        } else {
+            if (!is.na(.saemObf)){
+                .env$extra <- paste0("(", crayon::italic(ifelse(is.null(uif$nmodel$lin.solved), "ODE", "Solved")),"); ", crayon::blurred$italic("OBJF by SAEM Gaussian quadrature"))
+            } else {
+                .env$extra <- paste0("(", crayon::italic(ifelse(is.null(uif$nmodel$lin.solved), "ODE", "Solved")),"); ", crayon::blurred$italic("OBJF not calculated"))
+            }
+            .env$theta <- data.frame(lower= -Inf, theta=init$THTA, upper=Inf, fixed=.fixed, row.names=uif$focei.names);
+            .env$fullTheta <- setNames(init$THTA, uif$focei.names)
+            .om0 <- .genOM(.parseOM(init$OMGA));
+            attr(.om0, "dimnames") <- list(uif$eta.names, uif$eta.names)
+            .env$omega <- .om0;
+            .env$etaObf <- data.frame(ID=seq_along(mat2[, 1]), setNames(as.data.frame(mat2), uif$eta.names), OBJI=NA);
+            .env$noLik <- TRUE;
+            .env$objective <- .saemObf;
+        }
+        fit.f <- try(foceiFit.data.frame(data=dat,
+                                         inits=init,
+                                         PKpars=uif$theta.pars,
+                                         ## par_trans=fun,
+                                         model=uif$rxode.pred,
+                                         pred=function(){return(nlmixr_pred)},
+                                         err=uif$error,
+                                         lower=uif$focei.lower,
+                                         upper=uif$focei.upper,
+                                         thetaNames=uif$focei.names,
+                                         etaNames=uif$eta.names,
+                                         etaMat=mat2,
+                                         env=.env,
+                                         fixed=.fixed,
+                                         skipCov=.skipCov,
+                                         control=foceiControl(maxOuterIterations=0,
+                                                              maxInnerIterations=0,
+                                                              covMethod=.covMethod,
+                                                              cores=1,
+                                                              atol=atol,
+                                                              rtol=rtol,
+                                                              method=.method,
+                                                              transitAbs=transitAbs,
+                                                              sumProd=uif$env$sum.prod,
+                                                              optExpression=uif$env$optExpression)), silent=FALSE);
+        if (inherits(fit.f, "try-error")){
+            if (is.na(calcResid)){
+                warning("Error calculating nlmixr object, return classic object");
+                .notCalced <- FALSE;
+                return(object);
+            } else if (calcResid){
+                calcResid <- FALSE
+            } else {
+                calcResid <- NA;
+            }
+        } else {
+            .notCalced <- FALSE;
+        }
+    }
+    .env <- fit.f$env;
+    if (.addCov & .sqrtm){
+        .env$covMethod <- "|fim|";
+        warning("Covariance matrix non-positive definite, corrected by sqrtm(fim %*% fim)")
+    } else if (!.addCov){
+        warning("FIM non-positive definite and cannot be used to calculate the covariance")
+    }
+    if (is.null(.env$time)){
+        .env$time <- data.frame(saem=.saemTime["elapsed"], check.names=FALSE, row.names=c(""));
+    } else {
+        .env$time <- data.frame(saem=.saemTime["elapsed"], .env$time, check.names=FALSE, row.names=c(""))
+    }
+    if (is.na(calcResid)){
+        row.names(.env$objDf) <- "SAEMg";
+    } else if (calcResid){
+        if (!is.na(.saemObf)){
+            .llik <- -.saemObf / 2;
+            attr(.llik, "df") <- attr(.env$loglik, "df");
+            .tmp <- data.frame(OBJF=.saemObf, AIC= .saemObf + 2 * attr(.env$logLik, "df"),
+                               BIC=.saemObf + log(.env$nobs) * attr(.env$logLik, "df"),
+                               "Log-likelihood"=as.numeric(.llik), check.names=FALSE);
+            if (any(names(.env$objDf) == "Condition Number")) .tmp <- data.frame(.tmp, "Condition Number"=NA, check.names=FALSE);
+            .env$objDf  <- rbind(.env$objDf,
+                                 .tmp)
+            row.names(.env$objDf) <- c("FOCEi", "SAEMg");
+        }
+    } else {
+        row.names(.env$objDf) <- "SAEMg";
+    }
+    return(fit.f);
 }
 
 #FIXME: coef_phi0, rmcmc, coef_sa
@@ -1387,5 +1566,5 @@ as.focei.saemFit <- function(object, uif, pt=proc.time(), ..., data){
 #FIXME: g = gc = 1
 #FIXME: ODE inits
 #FIXME: Tinf for ODE
-#FIXME: chk infusion poor fit
+                                        #FIXME: chk infusion poor fit
 

@@ -2,41 +2,37 @@
 % Please edit documentation in R/simulate.R
 \name{nlmixrSim}
 \alias{nlmixrSim}
-\alias{rxSolve.focei.fit}
-\alias{simulate.focei.fit}
-\alias{solve.focei.fit}
+\alias{rxSolve.nlmixrFitData}
+\alias{simulate.nlmixrFitData}
+\alias{solve.nlmixrFitData}
 \title{Simulate a nlmixr solved system}
 \usage{
 nlmixrSim(object, ...)
 
-\method{rxSolve}{focei.fit}(object, params = NULL, events = NULL,
+\method{rxSolve}{nlmixrFitData}(object, params = NULL, events = NULL,
   inits = NULL, scale = NULL, covs = NULL, method = c("liblsoda",
   "lsoda", "dop853"), transitAbs = NULL, atol = 1e-06, rtol = 1e-04,
-  maxsteps = 5000L, hmin = 0L, hmax = NULL, hini = 0L, maxordn = 12L,
-  maxords = 5L, ..., cores, covsInterpolation = c("linear", "locf", "nocb",
-  "midpoint"), addCov = FALSE, matrix = FALSE, sigma = NULL,
-  sigmaDf = NULL, nCoresRV = 1L, sigmaIsChol = FALSE,
-  nDisplayProgress = 10000L, amountUnits = NA_character_,
-  timeUnits = "hours", stiff, theta = NULL, eta = NULL,
-  addDosing = FALSE, updateObject = FALSE, doSolve = TRUE, omega = NULL,
+  maxsteps = 5000L, hmin = 0L, hmax = NULL, hini = 0L,
+  maxordn = 12L, maxords = 5L, ..., cores,
+  covsInterpolation = c("linear", "locf", "nocb", "midpoint"),
+  addCov = FALSE, matrix = FALSE, sigma = NULL, sigmaDf = NULL,
+  nCoresRV = 1L, sigmaIsChol = FALSE, nDisplayProgress = 10000L,
+  amountUnits = NA_character_, timeUnits = "hours", stiff,
+  theta = NULL, eta = NULL, addDosing = FALSE,
+  updateObject = FALSE, doSolve = TRUE, omega = NULL,
   omegaDf = NULL, omegaIsChol = FALSE, nSub = 1L, thetaMat = NULL,
   thetaDf = NULL, thetaIsChol = FALSE, nStud = 1L, dfSub = 0,
   dfObs = 0, returnType = c("rxSolve", "matrix", "data.frame"),
   seed = NULL, nsim = NULL)
 
-\method{simulate}{focei.fit}(object, nsim = 1, seed = NULL, ...)
+\method{simulate}{nlmixrFitData}(object, nsim = 1, seed = NULL, ...)
 
-\method{solve}{focei.fit}(a, b, ...)
+\method{solve}{nlmixrFitData}(a, b, ...)
 }
 \arguments{
-\item{object}{is a either a RxODE family of objects, or a file-name
-with a RxODE model specification, or a string with a RxODE
-model specification.}
+\item{object}{nlmixr object}
 
-\item{...}{Other arguments including scaling factors for each
-compartment.  This includes S# = numeric will scale a compartment
-# by a dividing the compartment amount by the scale factor,
-like NONMEM.}
+\item{...}{Other arguments sent to \code{rxSolve}}
 
 \item{params}{a numeric named vector with values for every
 parameter in the ODE system; the names must correspond to the
@@ -241,22 +237,15 @@ inverse Wishart distribution (scaled) or scaled inverse chi squared distribution
 \item \code{"rxSolve"} (default) will return a reactive data frame
      that can change easily change different pieces of the solve and
      update the data frame.  This is the currently standard solving
-     method in RxODE,  is used for \code{rxSolve(object, ...)}, \code{solev(object,...)},
+     method in RxODE,  is used for \code{rxSolve(object, ...)}, \code{solve(object,...)},
 \item \code{"data.frame"} -- returns a plain, non-reactive data
-     frame; Currently very slightly Faster than \code{returnType=\"matrix\"}
+     frame; Currently very slightly Faster than \code{returnType="matrix"}
 \item \code{"matrix"} -- returns a plain matrix with column names attached
     to the solved object.  This is what is used \code{object$run} as well as \code{object$solve}
 }}
 
 \item{seed}{an object specifying if and how the random number
-    generator should be initialized (\sQuote{seeded}).\cr
-    For the "lm" method, either \code{NULL} or an integer that will be
-    used in a call to \code{set.seed} before simulating the response
-    vectors.  If set, the value is saved as the \code{"seed"} attribute
-    of the returned value.  The default, \code{NULL} will not change the
-    random generator state, and return \code{\link{.Random.seed}} as the
-    \code{"seed"} attribute, see \sQuote{Value}.
-  }
+generator should be initialized}
 
 \item{nsim}{represents the number of simulations.  For RxODE, if
 you supply single subject event tables (created with
@@ -272,7 +261,7 @@ named argument, this overwrites the output}
 }
 \description{
 This takes the uncertainty in the model parameter estimates and to
-simulate a number of "studies".  Each study simulates a
+simulate a number of theoretical studies.  Each study simulates a
 realization of the parameters from the uncertainty in the fixed
 parameter estimates.  In addition the omega and sigma matrices are
 simulated from the uncertainty in the Omega/Sigma matrices based

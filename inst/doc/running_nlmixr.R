@@ -28,7 +28,7 @@ one.cmt <- function() {
 }
 
 ## ------------------------------------------------------------------------
-fit <- nlmixr(one.cmt, theo_sd, est="nlme", calc.resid=FALSE)
+fit <- nlmixr(one.cmt, theo_sd, est="nlme")
 print(fit)
 
 ## ------------------------------------------------------------------------
