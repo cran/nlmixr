@@ -4,31 +4,46 @@
 \alias{foceiControl}
 \title{Control Options for FOCEi}
 \usage{
-foceiControl(sigdig = 4, epsilon = NULL, maxInnerIterations = 1000,
-  maxOuterIterations = 5000, n1qn1nsim = NULL, method = c("liblsoda",
-  "lsoda", "dop853"), transitAbs = NULL, atol = NULL, rtol = NULL,
-  maxstepsOde = 5000L, hmin = 0L, hmax = NULL, hini = 0,
-  maxordn = 12L, maxords = 5L, cores, covsInterpolation = c("locf",
-  "linear", "nocb", "midpoint"), printInner = 0L, print = 1L,
-  printNcol = floor((getOption("width") - 23)/12), scaleTo = 1,
-  scaleObjective = 1, derivEps = rep(20 * sqrt(.Machine$double.eps),
-  2), derivMethod = c("switch", "forward", "central"),
-  derivSwitchTol = NULL, covDerivMethod = c("central", "forward"),
-  covMethod = c("r,s", "r", "s", ""), hessEps = 0.001,
-  covDerivEps = c(0, 0.001), lbfgsLmm = 7L, lbfgsPgtol = 0,
+foceiControl(sigdig = 3, ..., epsilon = NULL,
+  maxInnerIterations = 1000, maxOuterIterations = 5000,
+  n1qn1nsim = NULL, method = c("liblsoda", "lsoda", "dop853"),
+  transitAbs = NULL, atol = NULL, rtol = NULL, atolSens = NULL,
+  rtolSens = NULL, maxstepsOde = 50000L, hmin = 0L,
+  hmax = NA_real_, hini = 0, maxordn = 12L, maxords = 5L, cores,
+  covsInterpolation = c("locf", "linear", "nocb", "midpoint"),
+  print = 1L, printNcol = floor((getOption("width") - 23)/12),
+  scaleTo = 1, scaleObjective = 0, normType = c("rescale2", "mean",
+  "rescale", "std", "len", "constant"), scaleType = c("nlmixr", "norm",
+  "mult", "multAdd"), scaleCmax = 1e+05, scaleCmin = 1e-05,
+  scaleC = NULL, scaleC0 = 1e+05, derivEps = rep(20 *
+  sqrt(.Machine$double.eps), 2), derivMethod = c("switch", "forward",
+  "central"), derivSwitchTol = NULL, covDerivMethod = c("central",
+  "forward"), covMethod = c("r,s", "r", "s", ""),
+  hessEps = (.Machine$double.eps)^(1/3), centralDerivEps = rep(20 *
+  sqrt(.Machine$double.eps), 2), lbfgsLmm = 7L, lbfgsPgtol = 0,
   lbfgsFactr = NULL, eigen = TRUE, addPosthoc = TRUE,
   diagXform = c("sqrt", "log", "identity"), sumProd = FALSE,
   optExpression = TRUE, ci = 0.95, useColor = crayon::has_color(),
   boundTol = NULL, calcTables = TRUE, noAbort = TRUE,
   interaction = TRUE, cholSEtol = (.Machine$double.eps)^(1/3),
-  cholAccept = 0.001, resetEtaP = 0.1, diagOmegaBoundUpper = 5,
+  cholAccept = 0.001, resetEtaP = 0.15, resetThetaP = 0.05,
+  resetThetaFinalP = 0.15, diagOmegaBoundUpper = 5,
   diagOmegaBoundLower = 100, cholSEOpt = FALSE, cholSECov = FALSE,
-  fo = FALSE, covTryHarder = FALSE, outerOpt = c("bobyqa",
-  "L-BFGS-B", "lbfgsb3", "nlminb", "mma", "lbfgsbLG", "slsqp"),
+  fo = FALSE, covTryHarder = FALSE, outerOpt = c("nlminb", "bobyqa",
+  "lbfgsb3c", "L-BFGS-B", "mma", "lbfgsbLG", "slsqp", "Rvmmin"),
   innerOpt = c("n1qn1", "BFGS"), rhobeg = 0.2, rhoend = NULL,
   npt = NULL, rel.tol = NULL, x.tol = NULL, eval.max = 4000,
   iter.max = 2000, abstol = NULL, reltol = NULL,
-  resetHessianAndEta = FALSE, stateTrim = Inf, ..., stiff)
+  resetHessianAndEta = FALSE, stateTrim = Inf, gillK = 10L,
+  gillStep = 4, gillFtol = 0, gillRtol = sqrt(.Machine$double.eps),
+  gillKcov = 10L, gillStepCov = 2, gillFtolCov = 0,
+  rmatNorm = TRUE, smatNorm = TRUE, covGillF = TRUE,
+  optGillF = TRUE, covSmall = 1e-05, adjLik = TRUE, gradTrim = Inf,
+  maxOdeRecalc = 5, odeRecalcFactor = 10^(0.5),
+  gradCalcCentralSmall = 1e-04, gradCalcCentralLarge = 10000,
+  etaNudge = 0.01, stiff, nRetries = 3, seed = 42,
+  resetThetaCheckPer = 0.1, etaMat = NULL, repeatGillMax = 7,
+  stickyRecalcN = 5)
 }
 \arguments{
 \item{sigdig}{Optimization significant digits. This controls:
@@ -37,12 +52,16 @@ foceiControl(sigdig = 4, epsilon = NULL, maxInnerIterations = 1000,
 
  \item The tolerance of the inner and outer optimization is \code{10^-sigdig}
 
- \item The tolerance of the ODE solvers is \code{10^(-sigdig-1)}
+ \item The tolerance of the ODE solvers is
+ \code{0.5*10^(-sigdig-2)}; For the sensitivity equations the
+ default is \code{0.5*10^(-sigdig-1.5)} (only applicable for liblsoda)
 
  \item The tolerance of the boundary check is \code{5 * 10 ^ (-sigdig + 1)}
 
  \item The significant figures that some tables are rounded to.
 }}
+
+\item{...}{Ignored parameters}
 
 \item{epsilon}{Precision of estimate for n1qn1 optimization.}
 
@@ -79,15 +98,22 @@ by the ODE solver to determine if a good solution has been
 achieved. This is also used in the solved linear model to check
  if prior doses do not add anything to the solution.}
 
+\item{atolSens}{Sensitivity atol, can be different than atol with
+liblsoda.  This allows a less accurate solve for gradients (if desired)}
+
+\item{rtolSens}{Sensitivity rtol, can be different than rtol with
+liblsoda.  This allows a less accurate solve for gradients (if desired)}
+
 \item{maxstepsOde}{Maximum number of steps for ODE solver.}
 
 \item{hmin}{The minimum absolute step size allowed. The default
 value is 0.}
 
-\item{hmax}{The maximum absolute step size allowed.  The default
-checks for the maximum difference in times in your sampling and
-events, and uses this value.  The value 0 is equivalent to
-infinite maximum absolute step size.}
+\item{hmax}{The maximum absolute step size allowed.  When
+\code{hmax=NA} (default), uses the average difference (+hmaxSd*sd) in times
+and sampling events. When \code{hmax=NULL} RxODE uses the
+maximum difference in times in your sampling and events.  The
+value 0 is equivalent to infinite maximum absolute step size.}
 
 \item{hini}{The step size to be attempted on the first step. The
 default value is determined by the solver (when hini = 0)}
@@ -121,10 +147,6 @@ solving (ie thread-safe methods like "liblsoda").}
   carried backward to midpoint.
 }}
 
-\item{printInner}{Integer representing when the inner step is
-printed. By default this is 0 or do not print.  1 is print
-every function evaluation, 5 is print every 5 evaluations.}
-
 \item{print}{Integer representing when the outer step is
 printed. When this is 0 or do not print the iterations.  1 is
 print every function evaluation (default), 5 is print every 5
@@ -137,17 +159,159 @@ parameter estimates/gradient}
 By default this is 1.  When zero or below, no scaling is performed.}
 
 \item{scaleObjective}{Scale the initial objective function to this
-    value.  By default this is 1.  When \code{scaleObjective} is
-    greater than zero, this scaling is performed by:
+value.  By default this is 1.}
 
-     \code{scaledObj = currentObj / \|initialObj\| * scaleObjective}
+\item{normType}{This is the type of parameter
+    normalization/scaling used to get the scaled initial valuse
+    for nlmixr.  These are used with \code{scaleType} of.
 
-    Therefore, if the initial objective function is negative, the
-    initial scaled objective function would be negative as well.
-    When \code{scaleObjective} is less than zero, no scaling is
-    performed.}
+    With the exception of \code{rescale2}, these come
+    from
+    \href{https://en.wikipedia.org/wiki/Feature_scaling}{Feature
+    Scaling}. The \code{rescale2} The rescaling is the same type
+    described in the
+    \href{http://apmonitor.com/me575/uploads/Main/optimization_book.pdf}{OptdesX}
+    software manual.
 
-\item{derivEps}{Central/Forward difference tolerances, which is a
+    In general, all all scaling formula can be described by:
+
+    v_{scaled} = (v_{unscaled}-C_{1})/C_{2}
+
+    Where
+
+
+    The other data normalization approaches follow the following formula
+
+    v_{scaled} = (v_{unscaled}-C_{1})/C_{2};
+
+\itemize{
+
+\item \code{rescale2} This scales all parameters from (-1 to 1).
+    The relative differences between the parameters are preserved
+    with this approach and the constants are:
+
+    C_{1} = (max(all unscaled values)+min(all unscaled values))/2
+
+    C_{2} = (max(all unscaled values) - min(all unscaled values))/2
+
+
+\item \code{rescale} or min-max normalization. This rescales all
+    parmeters from (0 to 1).  As in the \code{rescale2} the
+    relative differences are preserved.  In this approach:
+
+    C_{1} = min(all unscaled values)
+
+    C_{2} = max(all unscaled values) - min(all unscaled values)
+
+
+\item \code{mean} or mean normalization.  This rescales to center
+    the parameters around the mean but the parameters are from 0
+    to 1.  In this approach:
+
+    C_{1} = mean(all unscaled values)
+
+    C_{2} = max(all unscaled values) - min(all unscaled values)
+
+\item \code{std} or standardization.  This standardizes by the mean
+     and standard deviation.  In this approach:
+
+    C_{1} = mean(all unscaled values)
+
+    C_{2} = sd(all unscaled values)
+
+\item \code{len} or unit length scaling.  This scales the
+   parameters to the unit length.  For this approach we use the Euclidean length, that
+   is:
+
+    C_{1} = 0
+
+    C_{2} = sqrt(v_1^2 + v_2^2 + ... + v_n^2)
+
+
+\item \code{constant} which does not perform data normalization. That is
+
+    C_{1} = 0
+
+    C_{2} = 1
+
+}}
+
+\item{scaleType}{The scaling scheme for nlmixr.  The supported types are:
+
+\itemize{
+\item \code{nlmixr}  In this approach the scaling is performed by the following equation:
+
+   v_{scaled} = (v_{current} - v_{init})/scaleC[i] + scaleTo
+
+The \code{scaleTo} parameter is specified by the \code{normType},
+and the scales are specified by \code{scaleC}.
+
+\item \code{norm} This approach uses the simple scaling provided
+    by the \code{normType} argument.
+
+\item \code{mult} This approach does not use the data
+normalization provided by \code{normType}, but rather uses
+multiplicitve scaling to a constant provided by the \code{scaleTo}
+argument.
+
+  In this case:
+
+  v_{scaled} = v_{current}/v_{init}*scaleTo
+
+\item \code{multAdd} This approach changes the scaling based on
+the parameter being specified.  If a parameter is defined in an
+exponenital block (ie exp(theta)), then it is scaled on a
+linearly, that is:
+
+  v_{scaled} = (v_{current}-v_{init}) + scaleTo
+
+Otherwise the parameter is scaled multiplicatively.
+
+   v_{scaled} = v_{current}/v_{init}*scaleTo
+
+}}
+
+\item{scaleCmax}{Maximum value of the scaleC to prevent overflow.}
+
+\item{scaleCmin}{Minimum value of the scaleC to prevent underflow.}
+
+\item{scaleC}{The scaling constant used with
+    \code{scaleType=nlmixr}.  When not specified, it is based on
+    the type of parameter that is estimated.  The idea is to keep
+    the derivatives similar on a log scale to have similar
+    gradient sizes.  Hence parameters like log(exp(theta)) would
+    have a scaling factor of 1 and log(theta) would have a scaling
+    factor of ini_value (to scale by 1/value; ie
+    d/dt(log(ini_value)) = 1/ini_value or scaleC=ini_value)
+
+   \itemize{
+
+   \item For parameters in an exponential (ie exp(theta)) or
+   parameters specifying powers, boxCox or yeoJohnson
+   transformations , this is 1.
+
+   \item For additive, proportional, lognormal error structures,
+   these are given by 0.5*abs(initial_estimate)
+
+   \item Factorials are scaled by abs(1/digamma(inital_estimate+1))
+
+   \item parameters in a log scale (ie log(theta)) are transformed
+   by log(abs(initial_estimate))*abs(initial_estimate)
+
+   }
+
+   These parameter scaling coefficients are chose to try to keep
+   similar slopes among parameters.  That is they all follow the
+   slopes approximately on a log-scale.
+
+   While these are chosen in a logical manner, they may not always
+   apply.  You can specify each parameters scaling factor by this
+   parameter if you wish.}
+
+\item{scaleC0}{Number to adjust the scaling factor by if the initial
+gradient is zero.}
+
+\item{derivEps}{Forward difference tolerances, which is a
     vector of relative difference and absolute difference.  The
     central/forward difference step size h is calculated as:
 
@@ -176,21 +340,23 @@ derivatives while calculating the covariance components
 
 \itemize{
 
- \item "\code{r,s}" Uses the sandwich matrix to calculate the covariance, that is: \code{solve(R) \%*\% S \%*\% solve(R)}
+ \item "\code{r,s}" Uses the sandwich matrix to calculate the
+ covariance, that is: \code{solve(R) \%*\% S \%*\% solve(R)}
 
- \item "\code{r}" Uses the Hessian matrix to calculate the covariance as \code{2 \%*\% solve(R)}
+ \item "\code{r}" Uses the Hessian matrix to calculate the
+ covariance as \code{2 \%*\% solve(R)}
 
- \item "\code{s}" Uses the crossproduct matrix to calculate the covariance as \code{4 \%*\% solve(S)}
+ \item "\code{s}" Uses the cross-product matrix to calculate the
+ covariance as \code{4 \%*\% solve(S)}
 
  \item "" Does not calculate the covariance step.
 }}
 
 \item{hessEps}{is a double value representing the epsilon for the Hessian calculation.}
 
-\item{covDerivEps}{Central/Forward difference tolerances while
-    calculating the covariance matrices.  This is a numeric vector
-    of relative difference and absolute difference.  The
-    central/forward difference step size h is calculated as:
+\item{centralDerivEps}{Central difference tolerances.  This is a
+    numeric vector of relative difference and absolute difference.
+    The central/forward difference step size h is calculated as:
 
         \code{h = abs(x)*derivEps[1] + derivEps[2]}}
 
@@ -268,9 +434,23 @@ Decomposition for a R or S matrix.}
 \item{resetEtaP}{represents the p-value for reseting the
 individual ETA to 0 during optimization (instead of the saved
 value).  The two test statistics used in the z-test are either
-chol(omega^-1) %%*%% eta or eta/sd(allEtas).  A p-value of 0
+chol(omega^-1) \%*\% eta or eta/sd(allEtas).  A p-value of 0
 indicates the ETAs never reset.  A p-value of 1 indicates the
 ETAs always reset.}
+
+\item{resetThetaP}{represents the p-value for reseting the
+population mu-referenced THETA parameters based on ETA drift
+during optimization, and resetting the optimization.  A
+p-value of 0 indicates the THETAs never reset.  A p-value of 1
+indicates the THETAs always reset and is not allowed.  The
+theta reset is checked at the beginning and when nearing a
+local minima.  The percent change in objective function where
+a theta reset check is initiated is controlled in
+\code{resetThetaCheckPer}.}
+
+\item{resetThetaFinalP}{represents the p-value for reseting the
+population mu-referenced THETA parameters based on ETA drift
+during optimization, and resetting the optimization one final time.}
 
 \item{diagOmegaBoundUpper}{This represents the upper bound of the
 diagonal omega matrix.  The upper bound is given by
@@ -290,7 +470,7 @@ should be used while optimizing.}
 \item{cholSECov}{Boolean indicating if the generalized Cholesky
 should be used while calculating the Covariance Matrix.}
 
-\item{fo}{is a boolean indicating if this is a fo approximation routine.}
+\item{fo}{is a boolean indicating if this is a FO approximation routine.}
 
 \item{covTryHarder}{If the R matrix is non-positive definite and
 cannot be corrected to be non-positive definite try estimating
@@ -323,13 +503,13 @@ not recommended. If not defined, it will be set to 2*n + 1}
 
 \item{rel.tol}{Relative tolerance before nlminb stops.}
 
-\item{x.tol}{X tolerance}
+\item{x.tol}{X tolerance for nlmixr optimizers}
 
 \item{eval.max}{Number of maximum evaluations of the objective function}
 
 \item{iter.max}{Maximum number of iterations allowed.}
 
-\item{abstol}{Absolute tolerance for nlmixr}
+\item{abstol}{Absolute tolerance for nlmixr optimizer}
 
 \item{reltol}{tolerance for nlmixr}
 
@@ -339,7 +519,94 @@ option \code{resetEtaP}.}
 
 \item{stateTrim}{Trim state amounts/concentrations to this value.}
 
-\item{...}{Ignored parameters}
+\item{gillK}{The total number of possible steps to determine the
+optimal forward/central difference step size per parameter (by
+the Gill 1983 method).  If 0, no optimal step size is
+determined.  Otherwise this is the optimal step size
+determined.}
+
+\item{gillStep}{When looking for the optimal forward difference
+step size, this is This is the step size to increase the
+initial estimate by.  So each iteration the new step size =
+(prior step size)*gillStep}
+
+\item{gillFtol}{The gillFtol is the gradient error tolerance that
+is accepable before issuing a warning/error about the gradient estimates.}
+
+\item{gillRtol}{The relative tolerance used for Gill 1983
+determination of optimal step size.}
+
+\item{gillKcov}{The total number of possible steps to determine
+the optimal forward/central difference step size per parameter
+(by the Gill 1983 method) during the covariance step.  If 0,
+no optimal step size is determined.  Otherwise this is the
+optimal step size determined.}
+
+\item{gillStepCov}{When looking for the optimal forward difference
+step size, this is This is the step size to increase the
+initial estimate by.  So each iteration during the covariance
+step is equalt new step size = (prior step size)*gillStepCov}
+
+\item{gillFtolCov}{The gillFtol is the gradient error tolerance
+that is acceptable before issuing a warning/error about the
+gradient estimates during the covariance step.}
+
+\item{rmatNorm}{A parameter to normalize gradient step size by the
+parameter value during the calculation of the R matrix}
+
+\item{smatNorm}{A parameter to normalize gradient step size by the
+parameter value during the calculation of the S matrix}
+
+\item{covGillF}{Use the Gill calculated optimal Forward difference
+step size for the instead of the central difference step size
+during the central difference gradient calculation.}
+
+\item{optGillF}{Use the Gill calculated optimal Forward difference
+step size for the instead of the central difference step size
+during the central differences for optimization.}
+
+\item{covSmall}{The covSmall is the small number to compare
+covariance numbers before rejecting an estimate of the
+covariance as the final estimate (when comparing sandwich vs
+R/S matrix estimates of the covariance).  This number controls
+how small the variance is before the covariance matrix is
+rejected.}
+
+\item{adjLik}{In nlmixr, the objective function matches NONMEM's
+objective function, which removes a 2*pi constant from the
+likelihood calculation. If this is TRUE, the likelihood
+function is adjusted by this 2*pi factor.  When adjusted this
+number more closely matches the likelihood approximations of
+nlme, and SAS approximations.  Regardless of if this is turned
+on or off the objective function matches NONMEM's objective
+function.}
+
+\item{gradTrim}{The parameter to adjust the gradient to if the
+|gradient| is very large.}
+
+\item{maxOdeRecalc}{Maximum number of times to reduce the ODE
+tolerances and try to resolve the system if there was a bad
+ODE solve.}
+
+\item{odeRecalcFactor}{The factor to increase the rtol/atol with
+bad ODE solving.}
+
+\item{gradCalcCentralSmall}{A small number that represents the value
+where |grad| < gradCalcCentralSmall where forward differences
+switch to central differences.}
+
+\item{gradCalcCentralLarge}{A large number that represents the value
+where |grad| > gradCalcCentralLarge where forward differences
+switch to central differences.}
+
+\item{etaNudge}{By default initial ETA estimates start at zero;
+Sometimes this doesn't optimize appropriately.  If this value
+is non-zero, when the n1qn1 optimization didn't perform
+appropriately, reset the Hessian, and nudge the ETA up by this
+value; If the ETA still doesn't move, nudge the ETA down by
+this value.  Finally if it doesn't move, reset it to zero and
+do not perform the optimization again.  This ETA nudge is only
+done on the first ETA optimization.}
 
 \item{stiff}{a logical (\code{TRUE} by default) indicating whether
     the ODE system is stiff or not.
@@ -354,6 +621,27 @@ option \code{resetEtaP}.}
     DOP853, an explicit Runge-Kutta method of order 8(5, 3) of
     Dormand and Prince as implemented in C by Hairer and Wanner
     (1993).}
+
+\item{nRetries}{If FOCEi doesn't fit with the current parameter
+estimates, randomly sample new parameter estimates and restart
+the problem.  This is similar to 'PsN' resampling.}
+
+\item{seed}{an object specifying if and how the random number
+generator should be initialized}
+
+\item{resetThetaCheckPer}{represents objective function
+\% percentage below which resetThetaP is checked.}
+
+\item{etaMat}{Eta matrix for initial estimates or final estimates
+of the ETAs.}
+
+\item{repeatGillMax}{If the tolerances were reduced when
+calculating the initial Gill differences, the Gill difference
+is repeated up to a maximum number of times defined by this
+parameter.}
+
+\item{stickyRecalcN}{The number of bad ODE solves before reducing
+the atol/rtol for the rest of the problem.}
 }
 \description{
 Control Options for FOCEi
@@ -363,12 +651,6 @@ Note this uses the R's L-BFGS-B in \code{\link{optim}} for the
 outer problem and the BFGS \code{\link[n1qn1]{n1qn1}} with that
 allows restoring the prior individual Hessian (for faster
 optimization speed).
-
-By default FOCEi scales the outer problem parameters to 1.0 for
-the initial parameter estimates and scales the objective function
-to 1.0, as suggested by the
-\href{https://www.nag.com/numeric/fl/nagdoc_fl25/html/e04/e04intro.html}{NAG library}
-and \href{scipy}{https://www.scipy-lectures.org/advanced/mathematical_optimization/}.
 
 However the inner problem is not scaled.  Since most eta estimates
 start near zero, scaling for these parameters do not make sense.

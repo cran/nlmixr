@@ -2,11 +2,14 @@
 % Please edit documentation in R/foceiFit.R
 \name{foceiFit}
 \alias{foceiFit}
+\alias{focei.fit}
 \alias{foceiFit.data.frame}
 \alias{foceiFit.data.frame0}
 \title{FOCEi fit}
 \usage{
 foceiFit(data, ...)
+
+focei.fit(data, ...)
 
 \method{foceiFit}{data.frame}(data, ...)
 
@@ -244,7 +247,7 @@ one.compartment.IV.model <- function(){
 
 fitIVp <- nlmixr(one.compartment.IV.model, datr, "focei");
 
-## You can also use the Cox-Box Transform of both sides with
+## You can also use the Box-Cox Transform of both sides with
 ## proportional error (Donse 2016)
 
 one.compartment.IV.model <- function(){

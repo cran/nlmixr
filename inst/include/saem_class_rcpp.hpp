@@ -171,7 +171,8 @@ void inits(List x) {
   statphi01 = as<mat>(x["statphi01"]);
   statphi02 = as<mat>(x["statphi02"]);
   }
-  fixedIx = as<uvec>(x["fixed.ix"]);
+  fixedIx0 = as<uvec>(x["fixed.i0"]);
+  fixedIx1 = as<uvec>(x["fixed.i1"]);
 
   nlambda1 = as<int>(x["nlambda1"]);
   nlambda0 = as<int>(x["nlambda0"]);
@@ -245,6 +246,10 @@ void saem_fit() {
 
   if (DEBUG>0) Rcout << "initialization successful\n";
   fsave = user_fn(phiM, evtM, optM);
+  if (distribution == 4){
+    fsave.elem(find( fsave < double_xmin)).fill(double_xmin);
+    fsave = log(fsave);
+  }
   if (DEBUG>0) Rcout << "initial user_fn successful\n";
   for (unsigned int kiter=0; kiter<(unsigned int)(niter); kiter++) {
     gamma2_phi1=Gamma2_phi1.diag();
@@ -277,13 +282,13 @@ void saem_fit() {
     g.elem( find( g < double_xmin) ).fill(double_xmin);
 
     //fsave = f;
-    if (distribution == 1) DYF(indioM)=0.5*(((yM-f)/g)%((yM-f)/g))+log(g);
+    if (distribution == 1 || distribution == 4) DYF(indioM)=0.5*(((yM-f)/g)%((yM-f)/g))+log(g);
     else
     if (distribution == 2) DYF(indioM)=-yM%log(f)+f;
     else
     if (distribution == 3) DYF(indioM)=-yM%log(f)-(1-yM)%log(1-f);
     else {
-        Rcout << "unknown distribution\n";
+      Rcout << "unknown distribution (id=" <<  distribution << ")\n";
         return;
     }
     //U_y is a vec of subject llik; summed over obs for each subject
@@ -326,9 +331,8 @@ void saem_fit() {
 
     d2logk(span(0,nlambda1-1),span(0,nlambda1-1))=-CGamma21;
     if (nphi0>0) {
-    d2logk(span(nlambda1,nlambda-1),span(nlambda1,nlambda-1))=-CGamma20;
+      d2logk(span(nlambda1,nlambda-1),span(nlambda1,nlambda-1))=-CGamma20;
     }
-
 
     vec fsM;
     fsM.set_size(0);
@@ -414,11 +418,14 @@ void saem_fit() {
     // update parameters
     vec Plambda1, Plambda0;
     Plambda1=inv_sympd(CGamma21)*sum((D1Gamma21%(COV1.t()*statphi11)),1);
+    if (fixedIx1.n_elem>0) {
+      Plambda1(fixedIx1) = MCOV1(jcov1(fixedIx1));
+    }
     MCOV1(jcov1)=Plambda1;
     if (nphi0>0) {
     Plambda0=inv_sympd(CGamma20)*sum((D1Gamma20%(COV0.t()*statphi01)),1);
-    if (fixedIx.n_elem>0) {
-      Plambda0(fixedIx) = MCOV0(jcov0(fixedIx));
+    if (fixedIx0.n_elem>0) {
+      Plambda0(fixedIx0) = MCOV0(jcov0(fixedIx0));
     }
     MCOV0(jcov0)=Plambda0;
     }
@@ -518,7 +525,7 @@ void saem_fit() {
     Plambda(ilambda0) = Plambda0;
 
     par_hist.row(kiter) = join_cols(join_cols(Plambda, Gamma2_phi1.diag()), vcsig2).t();
-    if (print>0 && (kiter==0 || (kiter+1)%print==0))
+    if (print != 0 && (kiter==0 || (kiter+1)%print==0))
     Rcout << kiter+1
           << ": "
           << par_hist.row(kiter);
@@ -556,7 +563,7 @@ private:
 
   int nphi0, nphi1, nphi;
   mat covstruct1;
-  uvec i1, i0, fixedIx;
+  uvec i1, i0, fixedIx1, fixedIx0;
   uvec pc1;
   mat COV1, COV0, LCOV1, LCOV0, COV21, COV20, MCOV1, MCOV0;
   mat Gamma2_phi1, Gamma2_phi0, mprior_phi1, mprior_phi0;
@@ -646,9 +653,13 @@ void do_mcmc(const int method,
       phiMc.col(i(k1))=phiM.col(i(k1))+randn<vec>(mx.nM)*mphi.Gdiag_phi(k1,k1);
 
     fc = user_fn(phiMc, mx.evtM, mx.optM);
+    if (distribution == 4){
+      fc.elem(find( fc < double_xmin)).fill(double_xmin);
+      fc = log(fc);
+    }
     gc = vecares + vecbres % abs(fc);                            //make sure gc > 0
     gc.elem( find( gc < double_xmin) ).fill(double_xmin);
-    if (distribution == 1) DYF(mx.indioM)=0.5*(((mx.yM-fc)/gc)%((mx.yM-fc)/gc))+log(gc);
+    if (distribution == 1 || distribution == 4) DYF(mx.indioM)=0.5*(((mx.yM-fc)/gc)%((mx.yM-fc)/gc))+log(gc);
     else
     if (distribution == 2) DYF(mx.indioM)=-mx.yM%log(fc)+fc;
     else

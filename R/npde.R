@@ -7,11 +7,14 @@
 ##'     prevent ties.
 ##' @param seed Seed for running nlmixr simulation.  By default 1009
 ##' @param updateObject Boolean indicating if original object should be updated.  By default this is TRUE.
+##' @inheritParams foceiControl
 ##' @param ... Other ignored parameters.
 ##' @return New nlmixr fit object
 ##' @author Matthew L. Fidler
 ##' @export
-addNpde <- function(object, nsim=300, ties=TRUE, seed=1009, updateObject=TRUE, ...){
+addNpde <- function(object, nsim=300, ties=TRUE, seed=1009, updateObject=TRUE,
+                    cholSEtol=(.Machine$double.eps)^(1/3), ...){
+    .pt  <- proc.time();
     .objName <- substitute(object);
     if (any(names(object) == "NPDE")){
         warning("Already contains NPDE")
@@ -25,7 +28,7 @@ addNpde <- function(object, nsim=300, ties=TRUE, seed=1009, updateObject=TRUE, .
     .rx <- gsub(rex::rex("sim", or("=", "~"), "rxTBSi(", capture(except_any_of(",)")), ",", anything, any_of("\n;")),
                 "sim=\\1", .rx)
     .si$rx <- .rx
-    .dat <- nlmixrData(getData(object))
+    .dat <- nlmixrData(.nmGetData(object))
     .dat <- .dat[.dat$EVID == 0, ]
     .si$object <- object;
     .si$returnType <- "data.frame.TBS";
@@ -40,7 +43,10 @@ addNpde <- function(object, nsim=300, ties=TRUE, seed=1009, updateObject=TRUE, .
     .dv <- object$DV;
     .dvl <- length(.dv)
     .cls <- class(object)
-    .new <- cbind(object, .Call(`_nlmixr_npde`, object$ID, .dv, .sim$sim, .sim$rxLambda, .sim$rxYj, ties=ties))
+    .evid <- rep(0L,.dvl);
+    .evid[is.na(object$RES) & !is.na(object$PRED)] <- 2L;
+    .new <- cbind(object, .Call(`_nlmixr_npde`, object$ID, .dv, .evid, .sim$sim, .sim$rxLambda, .sim$rxYj, ties,
+                                cholSEtol))
     class(.new) <- .cls;
     if (updateObject){
         .parent <- parent.frame(2);
@@ -56,6 +62,8 @@ addNpde <- function(object, nsim=300, ties=TRUE, seed=1009, updateObject=TRUE, .
             }
         }
     }
+    .env <- .new$env
+    .env$time <- data.frame(.env$time, npde=(proc.time() - .pt)["elapsed"], check.names=FALSE)
     return(.new)
 }
 ##' Output table/data.frame options

@@ -168,9 +168,15 @@ nlmixrSim <- function(object, ...){
 
     if (any(names(.xtra) == "omega")){
         .si$omega <- .xtra$omega;
+        if (any(is.na(.xtra$omega))){
+            .si$omega <- NULL
+        }
     }
     if (any(names(.xtra) == "sigma")){
         .si$sigma <- .xtra$sigma;
+        if (any(is.na(.xtra$sigma))){
+            .si$sigma <- NULL
+        }
     }
     if (any(names(.xtra) == "events") &&
         RxODE::rxIs(.xtra$events, "rx.event")){
@@ -207,6 +213,12 @@ nlmixrSim <- function(object, ...){
         }
         .cls <- c("nlmixrSim", class(.ret));
         attr(.cls, ".RxODE.env") <- .rxEnv
+        if (any(names(.ret)=="CMT") && any(names(object)=="CMT")){
+            if (is(object$CMT,"factor")){
+                levels(.ret$CMT) <- levels(object$CMT);
+                class(.ret$CMT) <- "factor"
+            }
+        }
         class(.ret) <- .cls
     }
     return(.ret)
@@ -345,11 +357,13 @@ predict.nlmixrFitData <- function(object, ...){
 ##' @export
 nlmixrAugPred <- function(object, ..., covsInterpolation = c("linear", "locf", "nocb", "midpoint"),
                           primary=NULL, minimum = NULL, maximum = NULL, length.out = 51L){
+    force(object);
     if (!inherits(object, "nlmixrFitData")){
         stop("Need a nlmixr fit object")
     }
     uif <- object$uif
     dat <- nlmixrData(getData(object))
+    names(dat)  <- toupper(names(dat))
     up.covs <- toupper(uif$all.covs);
     up.names <- toupper(names(dat))
     for (i in seq_along(up.covs)){
@@ -358,11 +372,11 @@ nlmixrAugPred <- function(object, ..., covsInterpolation = c("linear", "locf", "
             names(dat)[w] = uif$all.covs[i];
         }
     }
-    r <- range(dat$TIME)
-    if (is.null(minimum)){
+    r <- range(dat$TIME, na.rm=TRUE,finite=TRUE)
+    if (is.null(minimum) || is.infinite(minimum)){
         minimum <- r[1];
     }
-    if (is.null(maximum)){
+    if (is.null(maximum) || is.infinite(maximum)){
         maximum <- r[2];
     }
     new.time <- sort(unique(c(seq(minimum, maximum, length.out=length.out), dat$TIME)));
@@ -382,7 +396,7 @@ nlmixrAugPred <- function(object, ..., covsInterpolation = c("linear", "locf", "
                 return(fun(new.time))
             }))})
         names(new.cov) <- all.covs;
-        new.pts <- cbind(new.pts, all.covs);
+        new.pts <- cbind(new.pts, new.cov);
     }
     new.pts$EVID <- 0
     new.pts$AMT <- 0
@@ -392,10 +406,13 @@ nlmixrAugPred <- function(object, ..., covsInterpolation = c("linear", "locf", "
     dat <- dat[!duplicated(paste(dat$ID, dat$TIME)), ];
     lst <- as.list(match.call()[-1])
     lst <- lst[!(names(lst) %in% c("primary", "minimum", "maximum", "length.out"))]
+    lst$object <- object
     lst$ipred <- NA
     lst$events <- dat
     lst$params <- NULL;
     dat.new <- do.call("nlmixrPred", lst, envir=parent.frame(2))
+    dat.new$id <- factor(dat.new$id)
+    levels(dat.new$id) <- levels(object$ID)
     dat.new <- data.frame(dat.new[, 1:2], stack(dat.new[,-(1:2)]))
     levels(dat.new$ind) <- gsub("pred", "Population", gsub("ipred", "Individual", levels(dat.new$ind)))
     names(dat.old) <- tolower(names(dat.old))
@@ -406,13 +423,14 @@ nlmixrAugPred <- function(object, ..., covsInterpolation = c("linear", "locf", "
 
 ##' @rdname nlmixrAugPred
 ##' @export
-augPred.nlmixrFitData <- function(object, primary = NULL, minimum = min(primary), maximum = max(primary),
-                              length.out = 51, ...){
-    lst <- as.list(match.call()[-1])
-    ret <- do.call("nlmixrAugPred", lst, envir=parent.frame(2))
-    class(ret) <- c("nlmixrAugPred", "data.frame")
-    return(ret)
-}
+augPred.nlmixrFitData <- memoise::memoise(function(object, primary = NULL, minimum = NULL, maximum = NULL,
+                                                   length.out = 51, ...){
+   .ret  <- nlmixrAugPred(object=object, primary=primary,
+                          minimum=minimum, maximum=maximum,
+                          length.out=length.out,...)
+   class(.ret) <- c("nlmixrAugPred", "data.frame")
+   return(.ret)
+})
 
 ##' @export
 plot.nlmixrAugPred <- function(x, y, ...){
@@ -433,18 +451,18 @@ plot.nlmixrAugPred <- function(x, y, ...){
 ##' @rdname nlmixrSim
 ##' @export
 rxSolve.nlmixrFitData <- function(object, params=NULL, events=NULL, inits = NULL, scale = NULL,
-                              covs = NULL, method = c("liblsoda", "lsoda", "dop853"),
-                              transitAbs = NULL, atol = 1.0e-6, rtol = 1.0e-4,
-                              maxsteps = 5000L, hmin = 0L, hmax = NULL, hini = 0L, maxordn = 12L, maxords = 5L, ...,
-                              cores, covsInterpolation = c("linear", "locf", "nocb", "midpoint"),
-                              addCov = FALSE, matrix = FALSE, sigma = NULL, sigmaDf = NULL,
-                              nCoresRV = 1L, sigmaIsChol = FALSE, nDisplayProgress=10000L,
-                              amountUnits = NA_character_, timeUnits = "hours", stiff,
-                              theta = NULL, eta = NULL, addDosing=FALSE, updateObject=FALSE, doSolve=TRUE,
-                              omega = NULL, omegaDf = NULL, omegaIsChol = FALSE,
-                              nSub = 1L, thetaMat = NULL, thetaDf = NULL, thetaIsChol = FALSE,
-                              nStud = 1L, dfSub=0.0, dfObs=0.0, returnType=c("rxSolve", "matrix", "data.frame"),
-                              seed=NULL, nsim=NULL){
+                                  method = c("liblsoda", "lsoda", "dop853"),
+                                  transitAbs = NULL, atol = 1.0e-6, rtol = 1.0e-4,
+                                  maxsteps = 5000L, hmin = 0L, hmax = NULL, hini = 0L, maxordn = 12L, maxords = 5L, ...,
+                                  cores, covsInterpolation = c("linear", "locf", "nocb", "midpoint"),
+                                  addCov = FALSE, matrix = FALSE, sigma = NULL, sigmaDf = NULL,
+                                  nCoresRV = 1L, sigmaIsChol = FALSE, nDisplayProgress=10000L,
+                                  amountUnits = NA_character_, timeUnits = "hours", stiff,
+                                  theta = NULL, eta = NULL, addDosing=FALSE, updateObject=FALSE,
+                                  omega = NULL, omegaDf = NULL, omegaIsChol = FALSE,
+                                  nSub = 1L, thetaMat = NULL, thetaDf = NULL, thetaIsChol = FALSE,
+                                  nStud = 1L, dfSub=0.0, dfObs=0.0, returnType=c("rxSolve", "matrix", "data.frame"),
+                                  seed=NULL, nsim=NULL){
     do.call("nlmixrSim", as.list(match.call()[-1]), envir=parent.frame(2));
 }
 

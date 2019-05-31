@@ -164,3 +164,56 @@ nlme::groupedData
 ##' @importFrom nlme getData
 ##' @export
 nlme::getData
+
+##' @importFrom RxODE rxSymPySetupPred
+##' @export
+RxODE::rxSymPySetupPred
+
+##' @importFrom RxODE et
+##' @export
+RxODE::et
+
+
+##'@importFrom generics tidy
+##'@export
+generics::tidy
+
+
+##'@importFrom generics glance
+##'@export
+generics::glance
+
+##'@importFrom generics glance
+##'@export
+generics::glance
+
+##'@importFrom generics augment
+##'@export
+generics::augment
+
+##' @importFrom huxtable number_format
+##' @export
+huxtable::number_format
+
+##'@importFrom RxODE rxParams
+##'@export
+RxODE::rxParams
+
+##'@importFrom RxODE rxParam
+##'@export
+RxODE::rxParam
+
+
+##'@importFrom RxODE et
+##'@export
+RxODE::et
+
+
+
+##' @importFrom huxtable as_hux
+##' @export
+huxtable::as_hux
+
+##'@importFrom huxtable as_huxtable
+##'@export
+huxtable::as_huxtable

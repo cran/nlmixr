@@ -5,9 +5,11 @@
 \title{Control Options for SAEM}
 \usage{
 saemControl(seed = 99, nBurn = 200, nEm = 300, nmc = 3, nu = c(2,
-  2, 2), atol = 1e-06, rtol = 1e-04, stiff = TRUE,
-  transitAbs = FALSE, print = 1, trace = 0, covMethod = c("fim",
-  "r,s", "r", "s"), logLik = FALSE, optExpression = TRUE, ...)
+  2, 2), atol = 1e-06, rtol = 1e-04, method = "lsoda",
+  transitAbs = FALSE, print = 1, trace = 0, covMethod = c("linFim",
+  "fim", "r,s", "r", "s"), logLik = FALSE, nnodes.gq = 3,
+  nsd.gq = 1.6, optExpression = TRUE, maxsteps = 100000L,
+  adjObf = TRUE, ...)
 }
 \arguments{
 \item{seed}{Random Seed for SAEM step.  (Needs to be set for
@@ -49,19 +51,16 @@ by the ODE solver to determine if a good solution has been
 achieved. This is also used in the solved linear model to check
  if prior doses do not add anything to the solution.}
 
-\item{stiff}{a logical (\code{TRUE} by default) indicating whether
-    the ODE system is stiff or not.
+\item{method}{The method for solving ODEs.  Currently this supports:
 
-    For stiff ODE sytems (\code{stiff = TRUE}), \code{RxODE} uses the
-    LSODA (Livermore Solver for Ordinary Differential Equations)
-    Fortran package, which implements an automatic method switching
-    for stiff and non-stiff problems along the integration
-    interval, authored by Hindmarsh and Petzold (2003).
-
-    For non-stiff systems (\code{stiff = FALSE}), \code{RxODE} uses
-    DOP853, an explicit Runge-Kutta method of order 8(5, 3) of
-    Dormand and Prince as implemented in C by Hairer and Wanner
-    (1993).}
+\itemize{
+\item \code{"liblsoda"} thread safe lsoda.  This supports parallel
+           thread-based solving, and ignores user Jacobian specification.
+\item \code{"lsoda"} -- LSODA solver.  Does not support parallel thread-based
+      solving, but allows user Jacobian specification.
+\item \code{"dop853"} -- DOP853 solver.  Does not support parallel thread-based
+        solving nor user Jacobain specification
+}}
 
 \item{transitAbs}{boolean indicating if this is a transit
 compartment absorption}
@@ -79,6 +78,8 @@ typical fitting.}
     gradient cross-product (evaluated at the individual empirical
     Bayes estimates).
 
+ "\code{linFim}" Use the Linearized Fisher Information Matrix to calculate the covariance.
+
  "\code{fim}" Use the SAEM-calculated Fisher Information Matrix to calculate the covariance.
 
  "\code{r,s}" Uses the sandwich matrix to calculate the covariance, that is: \eqn{R^-1 \times S \times R^-1}
@@ -92,8 +93,23 @@ typical fitting.}
 \item{logLik}{boolean indicating that log-likelihood should be
 calculate by Gaussian quadrature.}
 
+\item{nnodes.gq}{number of nodes to use for the Gaussian
+quadrature when computing the likelihood with this method
+(defaults to 1, equivalent to the Laplaclian likelihood)}
+
+\item{nsd.gq}{span (in SD) over which to integrate when computing
+the likelihood by Gaussian quadrature. Defaults to 3 (eg 3
+times the SD)}
+
 \item{optExpression}{Optimize the RxODE expression to speed up
 calculation. By default this is turned on.}
+
+\item{maxsteps}{maximum number of (internally defined) steps allowed
+during one call to the solver. (5000 by default)}
+
+\item{adjObf}{is a boolean to indicate if the objective function
+should be adjusted to be closer to NONMEM's default objective
+function.  By default this is \code{TRUE}}
 
 \item{...}{Other arguments to control SAEM.}
 }

@@ -6,14 +6,16 @@
 \title{Fit nlme-based mixed-effect model using ODE implementation}
 \usage{
 nlme_ode(dat.o, model, parModel, parTrans, response,
-  responseScaler = NULL, transitAbs = FALSE, atol = 1e-06,
-  rtol = 1e-04, maxsteps = 5000, hmin = 0, hmax = NULL, hini = 0,
-  maxordn = 12, maxords = 5, debugODE = FALSE, mcCores = 1, ...)
+  responseScaler = NULL, transitAbs = FALSE, atol = 1e-08,
+  rtol = 1e-08, maxsteps = 5000, hmin = 0, hmax = NA_real_,
+  hini = 0, maxordn = 12, maxords = 5, debugODE = FALSE,
+  mcCores = 1, ...)
 
 nlmeOde(dat.o, model, parModel, parTrans, response,
-  responseScaler = NULL, transitAbs = FALSE, atol = 1e-06,
-  rtol = 1e-04, maxsteps = 5000, hmin = 0, hmax = NULL, hini = 0,
-  maxordn = 12, maxords = 5, debugODE = FALSE, mcCores = 1, ...)
+  responseScaler = NULL, transitAbs = FALSE, atol = 1e-08,
+  rtol = 1e-08, maxsteps = 5000, hmin = 0, hmax = NA_real_,
+  hini = 0, maxordn = 12, maxords = 5, debugODE = FALSE,
+  mcCores = 1, ...)
 }
 \arguments{
 \item{dat.o}{data to be fitted}
@@ -47,10 +49,11 @@ during one call to the solver. (5000 by default)}
 \item{hmin}{The minimum absolute step size allowed. The default
 value is 0.}
 
-\item{hmax}{The maximum absolute step size allowed.  The default
-checks for the maximum difference in times in your sampling and
-events, and uses this value.  The value 0 is equivalent to
-infinite maximum absolute step size.}
+\item{hmax}{The maximum absolute step size allowed.  When
+\code{hmax=NA} (default), uses the average difference (+hmaxSd*sd) in times
+and sampling events. When \code{hmax=NULL} RxODE uses the
+maximum difference in times in your sampling and events.  The
+value 0 is equivalent to infinite maximum absolute step size.}
 
 \item{hini}{The step size to be attempted on the first step. The
 default value is determined by the solver (when hini = 0)}

@@ -220,10 +220,13 @@ nlme_lin_cmpt <- function(dat, parModel,
     nlmixr::nlmeModList("dat.g", nlme::groupedData(DV~TIME|ID, dat));
     nlmixr::nlmeModList("PKpars", PKpars);
     nlmixr::nlmeModList("refpars", refpars);
+    nlmixr::nlmeModList("na.ignore", function(object,...){return(object)})
 
     mod.specs <- list(model=as.formula(sprintf("DV ~ (nlmixr::nlmeModList(\"user_fn\"))(%s, TIME, ID)", arg1)),
                       data = nlmixr::nlmeModList("dat.g"), fixed=parModel$fixed, random = parModel$random,
-                      start=parModel$start, ...);
+                      start=parModel$start,
+                      na.action=nlmixr::nlmeModList("na.ignore"),
+                      ...);
     if (length(.rm) > 0)
         mod.specs <- mod.specs[!(names(mod.specs) %in% .rm)]
     if (Sys.getenv("nlmixr_silent") == "TRUE"){
@@ -262,9 +265,8 @@ nlmeLinCmt <- nlme_lin_cmpt
                            dati <- subset(nlmixr::nlmeModList("dat.o"), id==as.integer(subj))
                            if (match("F1", names(theta), nomatch=0)) dati$amt <- theta["F1"]*dati$amt
                            if (match("RATE", names(theta), nomatch=0)) dati <- prepEv(dati, theta)
-                           ev <- eventTable()
-                           ev$import.EventTable(dati)
-
+                           ## ev <- eventTable()
+                           ## ev$import.EventTable(dati)
                            if (any(theta>1e38)) {
                                warning("large parameter values. may rewrite par_trans.")
                                print(theta)
@@ -274,9 +276,10 @@ nlmeLinCmt <- nlme_lin_cmpt
                                print(theta)
                            }
 
-                           m <- nlmixr::nlmeModList("m1")$run(theta, ev, inits, transitAbs=.(transitAbs), atol=.(atol), rtol=.(rtol),
+                           m <- nlmixr::nlmeModList("m1")$run(theta, dati, inits, transitAbs=.(transitAbs), atol=.(atol), rtol=.(rtol),
                                                               hmin=.(hmin), hmax=.(hmax), hini=.(hini), maxsteps = .(maxsteps),
-                                                              maxordn=.(maxordn), maxords=.(maxords));
+                                                              maxordn=.(maxordn), maxords=.(maxords),
+                                                              addDosing=NULL);
                            if (is.null(dim(m)))
                                m <- t(as.matrix(m))
                            den <- ifelse(is.null(nlmixr::nlmeModList("responseScaler")), 1, theta[nlmixr::nlmeModList("responseScaler")])
@@ -418,8 +421,8 @@ prepEv <- function(dati, theta)
 nlme_ode <- function(dat.o, model, parModel, parTrans,
                      response, responseScaler=NULL,
                      transitAbs = FALSE,
-                     atol = 1e-06, rtol=1.0e-4, maxsteps = 5000,
-                     hmin = 0, hmax = NULL,
+                     atol = 1e-08, rtol=1.0e-8, maxsteps = 5000,
+                     hmin = 0, hmax = NA_real_,
                      hini = 0, maxordn = 12, maxords = 5,
                      debugODE=FALSE, mcCores=1, ...)
 {
@@ -445,11 +448,8 @@ nlme_ode <- function(dat.o, model, parModel, parTrans,
         mcCores <- .xtra$mc.cores;
         .rm <- c(.rm, "mc.cores")
     }
-    if (any(dat.o$EVID[dat.o$EVID>0]<101))
-        stop("incompatible EVID values")
-
-                                        #a new env with a ref in .GlobalEnv, holding model components
-                                        #a hack due to non-std call by nlme
+    ##a new env with a ref in .GlobalEnv, holding model components
+    ##a hack due to non-std call by nlme
     ## assign("..ModList", new.env(), envir=.GlobalEnv)
 
                                         #prep ode
@@ -486,10 +486,13 @@ nlme_ode <- function(dat.o, model, parModel, parTrans,
     nlmixr::nlmeModList("dat.o", dat.o);
     nlmixr::nlmeModList("PKpars", PKpars);
     nlmixr::nlmeModList("debugODE", debugODE);
+    nlmixr::nlmeModList("na.ignore", function(object,...){return(object)})
 
     mod.specs <- list(model=as.formula(sprintf("DV ~ (nlmixr::nlmeModList(\"user_fn\"))(%s, TIME, ID)", arg1)),
                       data = nlmixr::nlmeModList("dat.g"), fixed=parModel$fixed, random = parModel$random,
-                      start=parModel$start, ...)
+                      start=parModel$start,
+                      na.action=nlmixr::nlmeModList("na.ignore"),
+                      ...)
     if (length(.rm) > 0)
         mod.specs <- mod.specs[!(names(mod.specs) %in% .rm)]
     if (Sys.getenv("nlmixr_silent") == "TRUE"){
@@ -680,7 +683,7 @@ anova.nlmixrNlme <- function(object, ...){
 
 ##' @rdname focei.eta
 focei.eta.nlmixrNlme <- function(object, ...){
-    mat <- as.matrix(VarCorr(object))
+    mat <- suppressWarnings(as.matrix(VarCorr(object)))
     dn <- dimnames(mat);
     d <- dim(mat);
     is.cov <- (d[2] >= 3);
@@ -688,8 +691,8 @@ focei.eta.nlmixrNlme <- function(object, ...){
     dimnames(mat) <- dn
     len <- length(mat[, 1, drop = FALSE]);
     mat <- mat[-len,, drop = FALSE]
+    etas <- sprintf("ETA[%d]", seq_along(row.names(mat)))
     est <- as.numeric(mat[, 1]);
-    etas <- sprintf("ETA[%d]", seq_along(row.names(est)))
     if (!is.cov)
         return(eval(parse(text=sprintf("list(%s)", paste(sprintf("ETA[%d] ~ %s", seq_along(est), est), collapse=", ")))));
     sd <- as.numeric(mat[-len, 2]);
@@ -735,8 +738,13 @@ focei.theta.nlmixrNlme <- function(object, uif, ...){
         ## Addititive + proportional
         add <- which(sapply(err.type, function(x)any(x == c("add", "norm", "dnorm"))))
         prop <- which(err.type == "prop")
-        thetas[prop] <- object$modelStruct$varStruct$const;
-        thetas[add] <- object$sigma;
+        if (length(add)==0){
+            thetas[prop] <- object$sigma;
+        } else {
+            .const <- coef(object$modelStruct$varStruct,  uncons = FALSE);
+            thetas[prop] <- object$sigma
+            thetas[add] <- .const
+        }
     } else if (is(err, "varPower")){
         ## Proportional
         prop <- which(err.type == "prop")
@@ -775,12 +783,12 @@ as.focei.nlmixrNlme <- function(object, uif, pt=proc.time(), ..., data, calcResi
     } else {
         dat <- data;
     }
-    var <- as.matrix(nlme::VarCorr(object))[,"Variance"]
+    var <- summary(object)$tTable[,"Std.Error"]
     var <- var[uif$focei.names]
     var <- setNames(as.numeric(var), uif$focei.names);
     var <- var[!is.na(var)];
     cov <- diag(length(var))
-    diag(cov) <- var;
+    diag(cov) <- var*var;
     attr(cov, "dimnames") <- list(names(var), names(var));
     .ini <- as.data.frame(uif$ini)
     .ini <- .ini[!is.na(.ini$ntheta),];
@@ -802,14 +810,16 @@ as.focei.nlmixrNlme <- function(object, uif, pt=proc.time(), ..., data, calcResi
         }
     }
     .notCalced <- TRUE;
+    .cwresTime  <- proc.time();
     while (.notCalced){
         env <- new.env(parent=emptyenv());
+        env$covMethod <- "nlme";
         env$method <- "nlme"
         env$uif <- uif
         env$nlme <- object;
         env$cov <- cov
         env$extra <- paste0(" by ", crayon::bold$yellow(ifelse(object$method == "REML", "REML", "maximum likelihood"))," (",
-                            crayon::italic(paste0(ifelse(is.null(uif$nmodel$lin.solved), "ODE", "Solved"),
+                            crayon::italic(paste0(ifelse(is.null(uif$nmodel$lin.solved), ifelse(uif$predSys, "PRED", "ODE"), "Solved"),
                                                   "; ", .text)), ")")
         if (is.na(calcResid)){
             env$theta <- data.frame(lower= -Inf, theta=init$THTA, upper=Inf, fixed=FALSE, row.names=uif$focei.names);
@@ -821,6 +831,7 @@ as.focei.nlmixrNlme <- function(object, uif, pt=proc.time(), ..., data, calcResi
             env$noLik <- FALSE;
             env$objective <- -2 * as.numeric(logLik(object));
             env$objectiveType <- "nlme";
+            env$adjObf <- TRUE
             if (object$method == "REML") env$objectiveType <- "nlmeREML";
         } else if (!calcResid){
             env$theta <- data.frame(lower= -Inf, theta=init$THTA, upper=Inf, fixed=FALSE, row.names=uif$focei.names);
@@ -831,6 +842,7 @@ as.focei.nlmixrNlme <- function(object, uif, pt=proc.time(), ..., data, calcResi
             env$etaObf <- data.frame(ID=seq_along(mat[, 1]), setNames(as.data.frame(mat), uif$eta.names), OBJI=NA);
             env$noLik <- TRUE;
             env$objective <- -2 * as.numeric(logLik(object));
+            env$adjObf <- TRUE
             env$objectiveType <- "nlme";
             if (object$method == "REML") env$objectiveType <- "nlmeREML";
             env$extra <- paste(env$extra, "nlme OBF")
@@ -868,24 +880,47 @@ as.focei.nlmixrNlme <- function(object, uif, pt=proc.time(), ..., data, calcResi
             .notCalced <- FALSE;
         }
     }
+    .cwresTime  <-  proc.time() - .cwresTime;
+    if (is.na(calcResid)){
+        .cwresTime  <- 0;
+    } else if (!calcResid){
+        .cwresTime  <- 0;
+    }
+    if (is(object$apVar,"character")){
+        env$message <- object$apVar;
+    } else {
+        env$message <- "";
+    }
     if (is.na(calcResid)){
         row.names(env$objDf) <- "nlme";
     } else if (!calcResid){
         row.names(env$objDf) <- "nlme";
     } else {
-        .tmp <- data.frame(OBJF=-2 * as.numeric(logLik(object)), AIC=AIC(object), BIC=BIC(object),
+        env$adjObf <- TRUE
+        .tmp <- data.frame(OBJF=-2 * as.numeric(logLik(object))-
+                               ifelse(env$adjObf,nobs(object)*log(2*pi),0),
+                           AIC=AIC(object), BIC=BIC(object),
                            "Log-likelihood"=as.numeric(logLik(object)), check.names=FALSE);
-        if (any(names(env$objDf) == "Condition Number")) .tmp <- data.frame(.tmp, "Condition Number"=NA, check.names=FALSE);
-        env$objDf  <- rbind(env$objDf,
-                            .tmp)
+        if (any(names(env$objDf) == "Condition Number"))
+            .tmp <- data.frame(.tmp, "Condition Number"=env$objDf[,"Condition Number"], check.names=FALSE);
+        env$objDf  <- rbind(env$objDf, .tmp)
         row.names(env$objDf) <- c("FOCEi", "nlme");
     }
     .env <- fit.f$env;
-    .env$time <- data.frame(nlme=.nlmeTime["elapsed"], .env$time, check.names=FALSE, row.names=c(""))
-    ## if (fit.f$uif$.clean.dll){
-    ##     nlme.cleanup(fit.f);
-    ##     focei.cleanup(fit.f);
-    ## }
+    .time  <- .env$time;
+    .time <- .time[,!(names(.time) %in% c("optimize", "covariance"))]
+    .nlmeTime <- .nlmeTime["elapsed"]
+    if (calcResid){
+      .nlmeTime  <- .nlmeTime - .cwresTime["elapsed"];
+      .time  <- data.frame(.time, cwres=.cwresTime["elapsed"], check.names=FALSE);
+    }
+    .env$time <- data.frame(nlme=.nlmeTime, .time, check.names=FALSE, row.names=c(""))
+    if (inherits(fit.f, "nlmixrFitData")){
+        .cls <- class(fit.f);
+        .env <- attr(.cls, ".foceiEnv");
+        .cls[1]  <- "nlmixrNlmeUI"
+        class(fit.f) <- .cls
+    }
     return(fit.f)
 }
 
@@ -936,4 +971,22 @@ nlme.cleanup <- function(x){
     if (exists("m1", x$env)){
         RxODE::rxUnload(x$env$m1);
     }
+}
+##' Return VarCorr for nlmixr nlme
+##'
+##' This returns a numeric matrix instead of character matrix
+##' @inheritParams nlme::VarCorr
+##' @author Matthew L. Fidler
+##' @export
+VarCorr.nlmixrNlme <- function(x, sigma = NULL, ...){
+    .tmp <- x
+    class(.tmp) <- class(.tmp)[class(.tmp) != "nlmixrNlme"];
+    if (is.null(sigma)) sigma = .tmp$sigma
+    .vc <- VarCorr(.tmp, sigma=sigma, ...);
+    .vc2 <- as.numeric(.vc)
+    dim(.vc2) <- dim(.vc)
+    dimnames(.vc2) <- dimnames(.vc)
+    attr(.vc2, "title") <- attr(.vc, "title")
+    class(.vc2) <- "VarCorr.lme"
+    return(.vc2)
 }

@@ -5,7 +5,7 @@
 \title{Fit a nlmixr model}
 \usage{
 nlmixr_fit(uif, data, est = NULL, control = list(), ...,
-  sum.prod = FALSE, table = tableControl())
+  sum.prod = FALSE, table = tableControl(), save = NULL)
 }
 \arguments{
 \item{uif}{Parsed nlmixr model (by \code{nlmixr(mod.fn)}).}
@@ -26,6 +26,10 @@ products/sums.  Increases solving accuracy and solving time.}
 
 \item{table}{A list controlling the table options (i.e. CWRES,
 NPDE etc).  See \code{\link{tableControl}}.}
+
+\item{save}{This option determines if the fit will be saved to be
+reloaded if already run.  If NULL, get the option from
+\code{options("nlmixr.save")};}
 }
 \value{
 nlmixr fit object

@@ -12,7 +12,7 @@
 ##' @return Simulated dataset (invisibly)
 ##' @author Matthew L. Fidler
 ##' @export
-vpc_ui <- function(fit, data=NULL, n=100, bins = "jenks",
+vpc_ui <- memoise::memoise(function(fit, data=NULL, n=100, bins = "jenks",
                    n_bins = "auto", bin_mid = "mean",
                    show = NULL, stratify = NULL, pred_corr = FALSE,
                    pred_corr_lower_bnd = 0, pi = c(0.05, 0.95), ci = c(0.05, 0.95),
@@ -29,14 +29,22 @@ vpc_ui <- function(fit, data=NULL, n=100, bins = "jenks",
     }
     .xtra <- list(...);
     if (inherits(fit, "nlmixrVpc")){
-        sim <- fit;
+        sim <- attr(class(fit), "nlmixrVpc");
     } else {
         .xtra$object <- fit;
         ## .xtra$returnType <- "data.frame";
         .xtra$returnType <- "rxSolve";
+        .xtra$modelName <- "VPC"
         pt <- proc.time();
+        .dt <- fit$origData
+        .si <- fit$simInfo;
         if (is.null(data)){
-            dat <- nlmixrData(getData(fit));
+            if (!is.null(stratify)){
+                .rx <- paste0(.si$rx,"\nrx_dummy_var~",paste(tolower(stratify),collapse="+"), "\n");
+            } else {
+                .rx <- .si$rx;
+            }
+            dat <- nlmixrData(.dt, .rx);
         } else {
             dat <- data
         }
@@ -52,7 +60,20 @@ vpc_ui <- function(fit, data=NULL, n=100, bins = "jenks",
         sim0 <- sim;
         sim <- sim[, c("id", "time", "sim")]
         names(sim)[3] <- "dv";
-
+        ##
+        if (pred_corr){
+            .xtra.prd <- .xtra;
+            .xtra.prd$modelName <- "Pred (for pcVpc)"
+            .xtra.prd$params <- c(.si$params, setNames(rep(0, dim(.si$omega)[1]), dimnames(.si$omega)[[2]]),
+                                  setNames(rep(0, dim(.si$sigma)[1]), dimnames(.si$sigma)[[2]]))
+            .xtra.prd$omega <- NA
+            .xtra.prd$sigma <- NA
+            .xtra.prd$returnType <- "data.frame";
+            .xtra.prd$nStud <- 1;
+            .xtra.prd$nsim <- NULL;
+            sim2 <- do.call("nlmixrSim", .xtra.prd);
+            sim$pred <- sim2$sim
+        }
         diff <- proc.time() - pt;
         message(sprintf("done (%.2f sec)", diff["elapsed"]));
         onames <- names(dat)
@@ -65,10 +86,18 @@ vpc_ui <- function(fit, data=NULL, n=100, bins = "jenks",
         if (!is.null(stratify)){
             cols <- c(tolower(stratify), "dv")
             stratify <- tolower(stratify);
-        }  else {
+        } else if (inherits(fit, "nlmixrFitCore")){
+            .uif <- fit$uif
+            if (length(.uif$predDf$cmt) > 1){
+                cols <- c("cmt", "dv")
+                stratify <- "cmt";
+            } else {
+                cols <- c("dv");
+            }
+        } else {
             cols <- c("dv");
         }
-
+        ##
         dat <- dat[dat$evid == 0, ];
         ## Assume this is in the observed dataset. Add it to the current dataset
         if(!all(names(sim) %in% cols)){
@@ -79,7 +108,18 @@ vpc_ui <- function(fit, data=NULL, n=100, bins = "jenks",
                 names(sim) <- c(n, w);
             }
         }
+        if (any(names(sim)=="cmt") && any(names(fit)=="CMT")){
+            if (is(fit$CMT, "factor")){
+                sim$cmt  <- factor(sim$cmt,sort(unique(sim$cmt)), labels=levels(fit$CMT))
+            }
+        }
+        if (any(names(dat)=="cmt") && any(names(fit)=="CMT")){
+            if (is(fit$CMT, "factor")){
+                dat$cmt  <- factor(dat$cmt,sort(unique(dat$cmt)), labels=levels(fit$CMT))
+            }
+        }
         sim <- list(rxsim=sim0, sim=sim, obs=dat)
+        class(sim)  <- "rxHidden"
         attr(sim, "nsim") <- .xtra$nsim;
         class(sim) <- "nlmixrVpc";
     }
@@ -91,29 +131,42 @@ vpc_ui <- function(fit, data=NULL, n=100, bins = "jenks",
     }
     call <- as.list(match.call(expand.dots=TRUE))[-1];
     call <- call[names(call) %in% methods::formalArgs(getFromNamespace(vpcn,"vpc"))]
-    call$obs_cols = list(id="id", dv="dv", idv="time")
-    call$sim_cols = list(id="id", dv="dv", idv="time")
-    call$stratify = stratify
-    p = do.call(getFromNamespace(vpcn,"vpc"), c(sim, call), envir = parent.frame(1))
-    print(p);
-    sim$gg <- p;
+    call$obs_cols <- list(id="id", dv="dv", idv="time")
+    call$sim_cols <- list(id="id", dv="dv", idv="time")
+    call$stratify <- stratify
+    p  <-  do.call(getFromNamespace(vpcn, "vpc"), c(sim, call), envir = parent.frame(1))
+    cls <- c("nlmixrVpc", class(p));
+    attr(cls, "nlmixrVpc") <- sim
+    class(p) <- cls
+    return(p);
+})
 
-    return(invisible(sim));
+##'@export
+`$.nlmixrVpc` <- function(obj, arg, exact = TRUE){
+    if (arg=="gg"){
+        .x <- obj;
+        .cls  <- class(.x)[class(.x) != "nlmixrVpc"]
+        attr(.cls, "nlmixrVpc") <- NULL
+        class(.x) <- .cls
+        return(.x);
+    } else if (any(arg==c("rxsim", "sim", "obs"))) {
+        .info  <- attr(class(obj), "nlmixrVpc");
+        return(.info[[arg]])
+    }
+    NextMethod()
 }
 
 ##'@export
 print.nlmixrVpc <- function(x, ...){
-    cat(sprintf("nlmixr vpc object of %d simulations.\n", attr(x, "nsim")))
+    cat(sprintf("nlmixr vpc object of %d simulations.\n",
+                attr(attr(class(x), "nlmixrVpc"), "nsim")))
     cat("  $rxsim = original simulated data\n")
     cat("  $sim = merge simulated data\n")
     cat("  $obs = observed data\n")
     cat("  $gg = vpc ggplot\n")
     cat("use vpc(...) to change plot options\n")
-}
-
-##'@export
-plot.nlmixrVpc <- function(x, ...){
-    return(x$gg)
+    cat("plotting the object now\n");
+    NextMethod()
 }
 
 ##' @rdname vpc_ui

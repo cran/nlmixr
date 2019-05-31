@@ -5,7 +5,7 @@
 \title{NPDE calculation for nlmixr}
 \usage{
 addNpde(object, nsim = 300, ties = TRUE, seed = 1009,
-  updateObject = TRUE, ...)
+  updateObject = TRUE, cholSEtol = (.Machine$double.eps)^(1/3), ...)
 }
 \arguments{
 \item{object}{nlmixr fit object}
@@ -19,6 +19,9 @@ prevent ties.}
 \item{seed}{Seed for running nlmixr simulation.  By default 1009}
 
 \item{updateObject}{Boolean indicating if original object should be updated.  By default this is TRUE.}
+
+\item{cholSEtol}{tolerance for Generalized Cholesky
+Decomposition.  Defaults to suggested (.Machine$double.eps)^(1/3)}
 
 \item{...}{Other ignored parameters.}
 }

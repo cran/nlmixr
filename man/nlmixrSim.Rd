@@ -10,8 +10,8 @@
 nlmixrSim(object, ...)
 
 \method{rxSolve}{nlmixrFitData}(object, params = NULL, events = NULL,
-  inits = NULL, scale = NULL, covs = NULL, method = c("liblsoda",
-  "lsoda", "dop853"), transitAbs = NULL, atol = 1e-06, rtol = 1e-04,
+  inits = NULL, scale = NULL, method = c("liblsoda", "lsoda",
+  "dop853"), transitAbs = NULL, atol = 1e-06, rtol = 1e-04,
   maxsteps = 5000L, hmin = 0L, hmax = NULL, hini = 0L,
   maxordn = 12L, maxords = 5L, ..., cores,
   covsInterpolation = c("linear", "locf", "nocb", "midpoint"),
@@ -19,11 +19,11 @@ nlmixrSim(object, ...)
   nCoresRV = 1L, sigmaIsChol = FALSE, nDisplayProgress = 10000L,
   amountUnits = NA_character_, timeUnits = "hours", stiff,
   theta = NULL, eta = NULL, addDosing = FALSE,
-  updateObject = FALSE, doSolve = TRUE, omega = NULL,
-  omegaDf = NULL, omegaIsChol = FALSE, nSub = 1L, thetaMat = NULL,
-  thetaDf = NULL, thetaIsChol = FALSE, nStud = 1L, dfSub = 0,
-  dfObs = 0, returnType = c("rxSolve", "matrix", "data.frame"),
-  seed = NULL, nsim = NULL)
+  updateObject = FALSE, omega = NULL, omegaDf = NULL,
+  omegaIsChol = FALSE, nSub = 1L, thetaMat = NULL, thetaDf = NULL,
+  thetaIsChol = FALSE, nStud = 1L, dfSub = 0, dfObs = 0,
+  returnType = c("rxSolve", "matrix", "data.frame"), seed = NULL,
+  nsim = NULL)
 
 \method{simulate}{nlmixrFitData}(object, nsim = 1, seed = NULL, ...)
 
@@ -51,12 +51,8 @@ compartments);}
 parameters of the system.  The names must correstond to the
 parameter identifiers in the ODE specification. Each of the
 ODE variables will be divided by the scaling factor.  For
-example \code{scale=(center=2)} will divide the center ODE
+example \code{scale=c(center=2)} will divide the center ODE
 variable by 2.}
-
-\item{covs}{a matrix or dataframe the same number of rows as the
-sampling points defined in the events \code{eventTable}.  This
-is for time-varying covariates.}
 
 \item{method}{The method for solving ODEs.  Currently this supports:
 
@@ -88,10 +84,11 @@ during one call to the solver. (5000 by default)}
 \item{hmin}{The minimum absolute step size allowed. The default
 value is 0.}
 
-\item{hmax}{The maximum absolute step size allowed.  The default
-checks for the maximum difference in times in your sampling and
-events, and uses this value.  The value 0 is equivalent to
-infinite maximum absolute step size.}
+\item{hmax}{The maximum absolute step size allowed.  When
+\code{hmax=NA} (default), uses the average difference (+hmaxSd*sd) in times
+and sampling events. When \code{hmax=NULL} RxODE uses the
+maximum difference in times in your sampling and events.  The
+value 0 is equivalent to infinite maximum absolute step size.}
 
 \item{hini}{The step size to be attempted on the first step. The
 default value is determined by the solver (when hini = 0)}
@@ -184,10 +181,35 @@ added to parameters}
 added to parameters}
 
 \item{addDosing}{Boolean indicating if the solve should add RxODE
-evid and amt columns.  This will also include dosing
-information and estimates at the doses.  Be default, RxODE
-only includes estimates at the observations. (default
-\code{FALSE}).}
+    EVID and related columns.  This will also include dosing
+    information and estimates at the doses.  Be default, RxODE
+    only includes estimates at the observations. (default
+    \code{FALSE}). When \code{addDosing} is \code{NULL}, only
+    include \code{EVID=0} on solve and exclude any model-times or
+    \code{EVID=2}. If \code{addDosing} is \code{NA} the classic
+    \code{RxODE} EVID events. When \code{addDosing} is \code{TRUE}
+    add the event information in NONMEM-style format; If
+    \code{subsetNonmem=FALSE} RxODE will also extra event types
+    (\code{EVID}) for ending infusion and modeled times:
+
+\itemize{
+
+\item \code{EVID=-1} when the modeled rate infusions are turned
+off (matches \code{rate=-1})
+
+\item \code{EVID=-2} When the modeled duration infusions are
+turned off (matches \code{rate=-2})
+
+\item \code{EVID=-10} When the specified \code{rate} infusions are
+turned off (matches \code{rate>0})
+
+\item \code{EVID=-20} When the specified \code{dur} infusions are
+turned off (matches \code{dur>0})
+
+\item \code{EVID=101,102,103,...} Modeled time where 101 is the
+first model time, 102 is the second etc.
+
+}}
 
 \item{updateObject}{This is an internally used flag to update the
 RxODE solved object (when supplying an RxODE solved object) as
@@ -195,10 +217,9 @@ well as returning a new object.  You probably should not
 modify it's \code{FALSE} default unless you are willing to
 have unexpected results.}
 
-\item{doSolve}{Internal flag.  By default this is \code{TRUE},
-when \code{FALSE} a list of solving options is returned.}
-
-\item{omega}{Named omega matrix.}
+\item{omega}{Estimate of Covariance matrix. When omega is a list,
+assume it is a block matrix and convert it to a full matrix
+for simulations.}
 
 \item{omegaDf}{The degrees of freedom of a t-distribution for
 simulation.  By default this is \code{NULL} which is

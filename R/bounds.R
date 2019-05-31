@@ -6,7 +6,11 @@
 ##' @export
 ##' @keywords internal
 nlmixrBounds <- function(fun){
-    fun2 <- as.character(attr(fun,"srcref"),useSource=TRUE);
+    if (!is.null(attr(fun, "srcref"))){
+        fun2 <- as.character(attr(fun,"srcref"),useSource=TRUE);
+    } else {
+        return(eval(fun(),parent.frame(1)));
+    }
     w <- which(regexpr("^ *#+.*", fun2) == 1);
     if (length(w) > 0){
         fun2 <- fun2[-w];
@@ -565,12 +569,12 @@ nlmixrBounds <- function(fun){
         stop(sprintf("The following parameters initial estimates are infinite: %s", paste(df$name[w], collapse=", ")))
     }
 
-    w <- which(df$lower == df$est && df$est == df$upper);
+    w <- which(df$lower == df$est & df$est == df$upper);
     if (length(w) > 0){
         stop(sprintf("The estimate, and upper and lower bounds are the same for the following parameters: %s\nTo fix parameters use %s=fix(%s) instead.",
                      paste(df$name[w], collapse=", "), df$name[w[1]], df$est[w[1]]))
     }
-    w <- which(df$lower == df$est || df$est == df$upper);
+    w <- which(df$lower == df$est | df$est == df$upper);
     if (length(w) > 0){
         tmp <- unique(sort(c(df$est[w[1]], df$lower[w[1]], df$upper[w[1]])));
         tmp <- tmp[!is.infinite(tmp)];
@@ -622,11 +626,11 @@ as.data.frame.nlmixrBounds <- function(x, row.names = NULL, optional = FALSE, ..
 
 ##' @export
 print.nlmixrBounds <- function(x, ...){
-    message(paste0(crayon::bold("Fixed Effects")," (", crayon::bold$blue("$theta"), "):"));
+    cat(paste0(crayon::bold("Fixed Effects")," (", crayon::bold$blue("$theta"), "):"),"\n");
     print(x$theta);
     omega <- x$omega;
     if (dim(omega)[1] > 0){
-        message(paste0("\n", crayon::bold("Omega")," (", crayon::bold$blue("$omega"), "):"))
+        cat(paste0("\n", crayon::bold("Omega")," (", crayon::bold$blue("$omega"), "):"),"\n")
         print(omega)
     }
 }

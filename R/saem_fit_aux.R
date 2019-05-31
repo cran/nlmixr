@@ -1,10 +1,42 @@
 ##FIXME: g by endpint
+
+##' Log-likelihood using Gaussian Quadrature
+##'
+##' Estimate the log-likelihood using Gaussian Quadrature (multidimensional
+##' grid)
+##'
+##'
+##' @param fit saemFit fit
+##'
+##' @inheritParams saemControl
+##'
+##' @return log-likelihood calculated by Gaussian Quadrature
+##'
+##' @references  Kuhn E, Lavielle M. Maximum likelihood estimation in nonlinear
+##' mixed effects models. Computational Statistics and Data Analysis 49, 4
+##' (2005), 1020-1038.
+##'
+##' Comets E, Lavenu A, Lavielle M. SAEMIX, an R version of the SAEM algorithm.
+##' 20th meeting of the Population Approach Group in Europe, Athens, Greece
+##' (2011), Abstr 2173.
+##'
+##' @export
 calc.2LL = function(fit, nnodes.gq=8, nsd.gq=4) {
     ##nnodes.gq=8, nsd.gq=4
     .env <- attr(fit,"env");
-    if (.env$is.ode) .env$model$assignPtr()
+    saem.cfg  <-  attr(fit, "saem.cfg")
+    if (.env$is.ode){
+        ## .env$model$assignPtr()
+        .evtM  <- saem.cfg$evtM
+        .rx <- .env$model
+        .pars <- .rx$params
+        .pars <- setNames(rep(1.1,length(.pars)),.pars);
+        suppressWarnings(do.call(RxODE:::rxSolve.default,
+                                c(list(object=.rx, params=.pars,
+                                       events=.evtM,.setupOnly=2L),
+                                  saem.cfg$optM)));
+    }
     dopred = attr(fit, "dopred")
-    saem.cfg = attr(fit, "saem.cfg")
     resMat = fit$resMat
     ares = resMat[,1]
     bres = resMat[,2]
@@ -54,7 +86,11 @@ calc.2LL = function(fit, nnodes.gq=8, nsd.gq=4) {
     b = (xmax-xmin)/2; dim(b) = c(N, nphi1)
 
     Q = 0
-    message("Calculating -2LL by Gaussian quadrature")
+    if (nnodes.gq==1){
+        message(sprintf("Calculating Laplace -2LL (nsd=%s)",nsd.gq))
+    } else {
+        message(sprintf("Calculating -2LL by Gaussian quadrature (nnodes=%s,nsd=%s)",nnodes.gq,nsd.gq))
+    }
     RxODE::rxProgress(nx)
     on.exit(RxODE::rxProgressAbort());
     for (j in 1:nx) {
@@ -72,7 +108,7 @@ calc.2LL = function(fit, nnodes.gq=8, nsd.gq=4) {
         RxODE::rxTick();
     }
     RxODE::rxProgressStop();
-    ll2 = 2*sum(log(Q)+rowSums(log(b))) - N*log(det(Omega)) - (N*nphi1+ ntotal)*log(2*pi)
+    ll2 = 2*sum(log(Q)+rowSums(log(b))) - N*log(det(Omega)) - (N*nphi1+ ntotal)*log(2*pi) -2*saem.cfg$extraLL
     -ll2
 }
 
@@ -88,8 +124,18 @@ plot.saemFit = function(x,...) {
     CMT <- RES <- NULL
     fit = x
     .env <- attr(fit,"env");
-    if (.env$is.ode) .env$model$assignPtr()
-    saem.cfg = attr(fit, "saem.cfg")
+    saem.cfg  <-  attr(fit, "saem.cfg")
+    if (.env$is.ode){
+        ## .env$model$assignPtr()
+        .evtM  <- saem.cfg$evtM
+        .rx <- .env$model
+        .pars <- .rx$params
+        .pars <- setNames(rep(1.1,length(.pars)),.pars);
+        suppressWarnings(do.call(RxODE:::rxSolve.default,
+                                c(list(object=.rx, params=.pars,
+                                       events=.evtM,.setupOnly=2L),
+                                  saem.cfg$optM)));
+    }
     dat = as.data.frame(saem.cfg$evt)
     dat = cbind(dat[dat$EVID == 0, ], DV = saem.cfg$y)
     df = rbind(cbind(dat, grp = 1), cbind(dat, grp = 2), cbind(dat, grp = 3))
@@ -243,4 +289,114 @@ gqg.mlx<-function(dim,nnodes.gq) {
 	}
 	weights<-apply(mw,1,prod)
 	return(list(nodes=nodes,weights=weights))
+}
+
+cutoff = function (x, cut = .Machine$double.xmin) {
+    x[x < cut] <- cut
+    x
+}
+
+##' Covariance matrix by Fisher Information Matrix via linearization
+##'
+##' Get the covariance matrix of fixed effect estimates via calculating Fisher Information Matrix by linearization
+##'
+##' @param fit0 saemFit fit
+##'
+##' @return standard error of fixed effects
+##'
+##' @references Comets E, Lavenu A, Lavielle M. SAEMIX, an R version of the SAEM algorithm.
+##' 20th meeting of the Population Approach Group in Europe, Athens, Greece
+##' (2011), Abstr 2173.
+##'
+calc.COV = function(fit0) {
+  message("Calculating covariance matrix")
+  if  (is(fit0, "saemFit")) {
+      fit <- fit0
+  } else {
+      fit <- as.saem(fit0)
+  }
+  .env <- attr(fit,"env");
+  saem.cfg  <-  attr(fit, "saem.cfg")
+  if (.env$is.ode){
+    ## .env$model$assignPtr()
+    .evtM  <- saem.cfg$evtM
+    .rx <- .env$model
+    .pars <- .rx$params
+    .pars <- setNames(rep(1.1,length(.pars)),.pars);
+    suppressWarnings(do.call(RxODE:::rxSolve.default,
+                             c(list(object=.rx, params=.pars,
+                                    events=.evtM,.setupOnly=2L),
+                                    saem.cfg$optM)));
+  }
+  dopred = attr(fit, "dopred")
+  resMat = fit$resMat
+  ares = resMat[,1]
+  bres = resMat[,2]
+  i1 = saem.cfg$i1+1
+  nphi1 = saem.cfg$nphi1
+  nphi0 = saem.cfg$nphi0
+  nphi = nphi0 + nphi1
+  N = saem.cfg$N
+  RxODE::rxProgress(N + nphi)
+  on.exit(RxODE::rxProgressAbort());
+
+  ntotal = saem.cfg$ntotal
+  ix_endpnt = saem.cfg$ix_endpnt[1:ntotal]+1
+  ares = ares[ix_endpnt]
+  bres = bres[ix_endpnt]
+  if (is.null(names(saem.cfg$inits$theta))) {
+    names(saem.cfg$inits$theta) = rep("", length(saem.cfg$inits$theta))
+  }
+  s = matrix(names(saem.cfg$inits$theta), ncol=nphi, byrow=T)
+  fix.ix = c(s)=="FIXED"
+  s = matrix(saem.cfg$inits$theta, ncol=nphi, byrow=T)
+  cov.ix = !is.na(c(s))
+  cov.est.ix = !fix.ix & cov.ix
+
+  phi = hat.phi = fit$mpost_phi
+  omega = fit$Gamma2_phi1
+  evt = saem.cfg$evt
+  id = evt[evt[,"EVID"]==0,"ID"] + 1
+
+  dphi = cutoff(abs(phi)*1e-4, 1e-10)
+  f1 = sapply(1:nphi, function(j) {
+    phi[,j] <- hat.phi[,j] + dphi[,j]
+    ret <- as.vector(dopred(phi, saem.cfg$evt, saem.cfg$opt))
+    RxODE::rxTick();
+    return(ret)
+  })
+  f0 = as.vector(dopred(hat.phi, saem.cfg$evt, saem.cfg$opt))
+  DF = (f1 - f0)/dphi[id,]
+  g  = ares + bres*abs(f0)
+
+  #spectral decom for invVi, idea from saemix
+  Xi = lapply(1:N, function(i) {
+    ix <- id == i
+    nobs = sum(ix)
+    DFi <- DF[ix,]
+    dim(DFi) = c(nobs, nphi)
+    DFi.i1 <- DFi[,i1]
+    dim(DFi.i1) = c(nobs, nphi1)
+    m = diag(nobs)
+    diag(m) = g[ix]^2
+    Vi <- DFi.i1 %*% omega %*% t(DFi.i1) + m
+    VD <- try(eigen(Vi, symmetric=TRUE))
+    if (class(VD) == "try-error") stop("Spectral decom failure when computing FIM")
+    D <- Re(VD$values)
+    V <- Re(VD$vectors)
+    m = diag(length(D))
+    diag(m) = 1/sqrt(D)
+    invVi.5 <- m %*% t(V)    #backsolve(chol(Vi), diag(11)); chol() is worse
+    Ai   <- kronecker(diag(nphi), saem.cfg$Mcovariables[i,])
+    DFAi <- DFi %*% t(Ai[cov.est.ix,])  #CHECK!
+    ret <- invVi.5 %*% DFAi
+    RxODE::rxTick();
+    return(ret)
+  })
+  npar = sum(cov.est.ix)
+  X <- do.call("rbind", Xi)
+  Ri <- backsolve(qr.R(qr(X)), diag(npar))
+  ret <- crossprod(t(Ri))
+  RxODE::rxProgressStop();
+  return(ret)
 }

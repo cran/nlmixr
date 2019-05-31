@@ -610,16 +610,26 @@ nsis <- function(){ ## build installer...
 ##' Collect warnings and just warn once.
 ##'
 ##' @param expr R expression
-##' @return The value of the expression
+##' @param lst When \code{TRUE} return a list with
+##'     list(object,warnings) instead of issuing the warnings.
+##'     Otherwise, when \code{FALSE} issue the warnings and return the
+##'     object.
+##' @return The value of the expression or a list with the value of
+##'     the expression and a list of warning messages
 ##' @author Matthew L. Fidler
-.collectWarnings <- function(expr){
+##' @noRd
+.collectWarnings <- function(expr,lst=FALSE){
     ws <- c();
     this.env <- environment()
     ret <- suppressWarnings(withCallingHandlers(expr,warning=function(w){assign("ws", unique(c(w$message, ws)), this.env)}))
-    for (w in ws){
-        warning(w)
+    if (lst){
+        return(list(ret, ws));
+    } else {
+        for (w in ws){
+            warning(w)
+        }
+        return(ret);
     }
-    return(ret);
 }
 
 ##' Print x using the message facility
@@ -645,4 +655,43 @@ nlmixrPrint <- function(x, ...){
     ## This is for r checks, though they need to be loaded...
     vpc::vpc(...)
     dparser::dparse(...)
+}
+
+##' Generalized Cholesky Matrix Decomposition
+##'
+##'  Performs a (modified) Cholesky factorization of the form
+##'
+##'   t(P) \%*\% A \%*\% P  + E = t(R) \%*\% R
+##'
+##'  As detailed in Schnabel/Eskow (1990)
+##'
+##' @param matrix Matrix to be Factorized.
+##' @param tol Tolerance; Algorithm suggests (.Machine$double.eps) ^ (1 / 3), default
+##' @return Generalized Cholesky decomposed matrix.
+##' @author Matthew L. Fidler (translation), Johannes Pfeifer, Robert
+##'     B. Schnabel and Elizabeth Eskow
+##'
+##' @references
+##'
+##' matlab source: http://www.dynare.org/dynare-matlab-m2html/matlab/chol_SE.html; Slightly different return values
+##'
+##' Robert B. Schnabel and Elizabeth
+##' Eskow. 1990. "A New Modified Cholesky Factorization," SIAM Journal
+##' of Scientific Statistical Computing, 11, 6: 1136-58.
+##'
+##' Elizabeth Eskow and Robert B. Schnabel
+##' 1991. "Algorithm 695 - Software for a New Modified Cholesky Factorization,"
+##' ACM Transactions on Mathematical Software, Vol 17, No 3: 306-312
+##'
+##' @note
+##'
+##' This version does not pivot or return the E matrix
+##'
+##' @export
+cholSE <- function(matrix, tol=(.Machine$double.eps) ^ (1 / 3)){
+    .Call(`_nlmixr_cholSE_`, matrix, tol);
+}
+
+.setRoot <- function(){
+    setwd("c:/");
 }
