@@ -450,11 +450,11 @@ void codegen_stanode(FILE *outpt, const char* template_file) {
 
 
 void inits() {
-  symtab.symb_str = (char *) malloc(64*MXSYM);
+  symtab.symb_str = (char *) malloc(64*MXSYM*sizeof(int));
   err_msg((intptr_t)symtab.symb_str, "error allocating vars", 1);
 
   symtab.offset[0]=0;
-  memset(symtab.is_lhs, 0, MXSYM);
+  memset(symtab.is_lhs, 0, MXSYM*sizeof(int));
   symtab.nvar=0;
   symtab.nder=0;
   symtab.is_fn=0;
@@ -524,6 +524,12 @@ void parse_pars(char **model_file, char **result_file, int *nrhs, int *dosep, ch
   else {
     printf("\nfailure\n");
   }
+  if (pn){
+    free_D_ParseTreeBelow(p,pn);
+    free_D_ParseNode(p,pn);
+    pn=0;
+  }
+  free_D_Parser(p);
   return;
 }
 

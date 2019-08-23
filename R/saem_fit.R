@@ -1063,8 +1063,11 @@ configsaem <- function(model, data, inits,
   phiM = matrix(0, N, nphi)
   phiM[,i1] = mprior_phi1
   phiM[,i0] = mprior_phi0
-  phiM = phiM[rep(1:N, nmc),]
-  phiM = phiM + matrix(rnorm(phiM), dim(phiM)) %*% diag(sqrt(inits$omega))
+  phiM = phiM[rep(1:N, nmc),, drop = FALSE]
+  .tmp <- diag(sqrt(inits$omega))
+  if (model$N.eta == 1) .tmp <- matrix(sqrt(inits$omega))
+  phiM = phiM + matrix(rnorm(phiM), dim(phiM)) %*% .tmp
+
 
   mc.idx = rep(1:N, nmc)
   statphi = sapply(1:nphi, function(x) tapply(phiM[,x], mc.idx, mean))
@@ -1820,8 +1823,8 @@ as.focei.saemFit <- function(object, uif, pt=proc.time(), ..., data, calcResid=T
                            check.names=FALSE);
       .env$objDf  <- rbind(.env$objDf, .tmp)
       row.names(.env$objDf) <- c("FOCEi", .rn);
-      .setSaemExtra(.env, "FOCEi");
     }
+    .setSaemExtra(.env, "FOCEi")
   } else {
     row.names(.env$objDf) <- .rn;
   }

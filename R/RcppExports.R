@@ -49,6 +49,32 @@ foceiOuter <- function(e) {
     .Call(`_nlmixr_foceiOuter`, e)
 }
 
+nlmixrGill83_ <- function(what, args, envir, which, gillRtol, gillK = 10L, gillStep = 2, gillFtol = 0, optGillF = TRUE) {
+    .Call(`_nlmixr_nlmixrGill83_`, what, args, envir, which, gillRtol, gillK, gillStep, gillFtol, optGillF)
+}
+
+#' @rdname nlmixrGradFun
+#' @export
+nlmixrEval_ <- function(theta, md5) {
+    .Call(`_nlmixr_nlmixrEval_`, theta, md5)
+}
+
+#' @rdname nlmixrGradFun
+#' @export
+nlmixrGrad_ <- function(theta, md5) {
+    .Call(`_nlmixr_nlmixrGrad_`, theta, md5)
+}
+
+#' @rdname nlmixrGradFun
+#' @export
+nlmixrParHist_ <- function(md5) {
+    .Call(`_nlmixr_nlmixrParHist_`, md5)
+}
+
+nlmixrHess_ <- function(thetaT, fT, e, gillInfoT) {
+    .Call(`_nlmixr_nlmixrHess_`, thetaT, fT, e, gillInfoT)
+}
+
 #' Return the square root of general square matrix A
 #'
 #' @param m Matrix to take the square root of.
@@ -73,8 +99,12 @@ foceiFitCpp_ <- function(e) {
     .Call(`_nlmixr_foceiFitCpp_`, e)
 }
 
-coxBox_ <- function(x = 1L, lambda = 1, yj = 0L) {
-    .Call(`_nlmixr_coxBox_`, x, lambda, yj)
+boxCox_ <- function(x = 1L, lambda = 1, yj = 0L) {
+    .Call(`_nlmixr_boxCox_`, x, lambda, yj)
+}
+
+iBoxCox_ <- function(x = 1L, lambda = 1, yj = 0L) {
+    .Call(`_nlmixr_iBoxCox_`, x, lambda, yj)
 }
 
 lin_cmt_stan <- function(obs_time, dose_time, dose, Tinf, params, oralSEXP, infusionSEXP, ncmtSEXP, parameterizationSEXP) {

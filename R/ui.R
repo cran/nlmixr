@@ -1,3 +1,60 @@
+.drakeTypeS <- NULL
+.drakeType <- function(){
+    if (is.null(.drakeTypeS)){
+        ns <- try(loadNamespace("drake"), silent=TRUE)
+        if (inherits(ns, "try-error")){
+            assignInMyNamespace(".drakeTypeS", 0L);
+        } else {
+            assignInMyNamespace(".drakeTypeS", 2L);
+        }
+    }
+    return(.drakeTypeS);
+}
+
+.drakeCompat0 <- function(x){
+    if (is.call(x)) {
+        .dt <- .drakeType();
+        .x1 <- as.character(x[[1]]);
+        if (any(.x1 == c("ignore", "no_deps")) && .dt != 0L){
+            return(x);
+        } else if (.x1 == "model" && .dt != 0L){
+            return(as.call(c(list(quote(ignore)), x)));
+        } else {
+            return(as.call(lapply(x, .drakeCompat0)));
+        }
+    } else {
+        return(x)
+    }
+}
+.drakeCompat <- function(x){
+  .f <- x;
+  .srcref <- attr(.f, "srcref");
+  body(.f) <- .drakeCompat0(body(.f))
+  attr(.f, "srcref") <- .srcref;
+  return(.f)
+}
+
+nlmixrfindLhs <- function(x) {
+  ## Modified from http://adv-r.had.co.nz/Expressions.html find_assign4
+  if (is.atomic(x) || is.name(x)) {
+    character()
+  } else if (is.call(x)) {
+    if ((identical(x[[1]], quote(`<-`)) ||
+         identical(x[[1]], quote(`=`))) &&
+        is.name(x[[2]])) {
+      lhs <- as.character(x[[2]])
+    } else {
+      lhs <- character()
+    }
+    unique(c(lhs, unlist(lapply(x, nlmixrfindLhs))))
+  } else if (is.pairlist(x)) {
+    unique(unlist(lapply(x, nlmixrfindLhs)))
+  } else {
+    stop("Don't know how to handle type ", typeof(x),
+         call. = FALSE)
+  }
+}
+
 .deparse <- function(expr){
   deparse(expr,width.cutoff=500, control = "useSource");
 }
@@ -105,7 +162,29 @@ ini <- function(ini, ...){
             }
             .uif$ini$est[.w] <- .val;
           } else {
-            .val <- eval(.call[[.n]]);
+            .val <- try(eval(.call[[.n]]), silent=TRUE);
+            .found <- TRUE
+            if (inherits(.val, "try-error")){
+              .found <- FALSE
+              .val <- as.character(.call[[.n]]);
+              .val2 <- .val;
+              .frames <- seq(1, sys.nframe());
+              .frames <- .frames[.frames != 0];
+              for (.f in .frames){
+                .env <- parent.frame(.f);
+                if (exists(.val, envir=.env)){
+                  .val2 <- try(get(.val, envir=.env), silent=TRUE);
+                  if (!inherits(.val2, "try-error")){
+                    .val <- .val2;
+                    .found <- TRUE
+                    break;
+                  }
+                }
+              }
+            }
+            if (!.found){
+              stop(sprintf("object '%s' not found", .val))
+            }
             if (length(.val) == 1){
               .uif$ini$est[.w] <- .val;
             } else if (length(.val) == 2){
@@ -469,6 +548,19 @@ update.function  <- .nlmixrUpdate
 ##' @export
 nlmixrUI <- function(fun){
   if (is(fun, "function")){
+    .funDrake <- .drakeCompat(fun);
+    if (!identical(.funDrake, fun)){
+      for (.f in seq(1, sys.nframe())){
+        .env <- parent.frame(.f);
+        for (.i in ls(.env)){
+          .t <- try(identical(get(.i, envir=.env), fun), silent=TRUE)
+          if (inherits(.t, "try-error")) .t <- FALSE
+          if (.t){
+            assign(.i, .funDrake, envir=.env);
+          }
+        }
+      }
+    }
     lhs0 <- nlmixrfindLhs(body(fun))
     dum.fun <- function(){return(TRUE)}
     env.here <- environment(dum.fun)
@@ -549,6 +641,7 @@ nlmixrUI <- function(fun){
   if (inherits(.ini, "try-error")){
     stop("Error parsing initial estimates.")
   }
+
   fun2 <- nlmixrUIModel(.model,ini,fun);
   ## if (inherits(fun2, "try-error")){
   ##     stop("Error parsing model.")
@@ -848,9 +941,11 @@ nlmixrUIModel <- function(fun, ini=NULL, bigmodel=NULL){
   rxode <- FALSE
   all.names <- allNames(body(fun));
   .diff <- setdiff(paste(ini$name), all.names)
-  .diff <- .diff[regexpr("[(]",.diff)==-1]
   if (length(.diff) > 0){
-    stop(sprintf("The following parameter(s) were in the ini block but not in the model block: %s", paste(.diff, collapse=", ")))
+    .diff <- .diff[regexpr("[(]",.diff)==-1]
+    if (length(.diff) > 0){
+      stop(sprintf("The following parameter(s) were in the ini block but not in the model block: %s", paste(.diff, collapse=", ")))
+    }
   }
   if (any(regexpr(rex::rex(start, or("rx_", "nlmixr_")), paste(all.names)) != -1)){
     stop("Parameters/States/Variables cannot start with `rx_` or `nlmixr_`");
@@ -1455,7 +1550,6 @@ nlmixrUIModel <- function(fun, ini=NULL, bigmodel=NULL){
                                     capture(any_spaces)),
                       reg00="",reg01="",repE="expr"){
       if (any(regexpr(.regRx, funTxt[1:w]) != -1)){
-
         .rxBegin <- funTxt[1:w];
         .re <- rex::rex(start, capture(any_spaces),reg0,
                         capture(any_spaces, or("=", "~", "<-")),
@@ -1536,9 +1630,7 @@ nlmixrUIModel <- function(fun, ini=NULL, bigmodel=NULL){
     w <- max(w);
 
     .finalFix <- function(){
-      if (any(regexpr(rex::rex(start,any_spaces,or("d/dt(", "f(", "F(", "dur(", "d(",
-                                  "lag(", "alag(", "r(", "rate(",
-                                  group("(0)", any_spaces, or("=", "~", "<-")))), funTxt[1:w],
+      if (any(regexpr(.regRx, funTxt[1:w],
                       perl=TRUE) != -1)){
         ## There are still mixed PK parameters and ODEs
         w <- which(regexpr(.regRx, funTxt, perl=TRUE) != -1);
@@ -1581,7 +1673,7 @@ nlmixrUIModel <- function(fun, ini=NULL, bigmodel=NULL){
   reg <- rex::rex(or("=","<-"),anything,boundary, or(ini$name), boundary);
   .regRx <- rex::rex(start,any_spaces, or("d/dt(", "f(", "F(", "dur(", "d(",
                         "lag(", "alag(", "r(", "rate(",
-                        group("(0)", any_spaces, or("=", "<-"))));
+                        group(anything, any_spaces, "(0)", any_spaces, or("=", "<-"))));
   .lhs <- nlmixrfindLhs(body(
     eval(parse(text=paste("function(){",
                           paste(.tmp,collapse="\n"),
@@ -1591,6 +1683,17 @@ nlmixrUIModel <- function(fun, ini=NULL, bigmodel=NULL){
   all.covs <- character();
   do.pred <- 1;
   pred.txt <- .deparse(f(body(fun)))
+  .reg <- rex::rex(or(group(any_spaces, "(", any_spaces, "{", any_spaces),
+                      group(any_spaces, "}", any_spaces, ")", any_spaces),
+                      group(any_spaces, "nlmixrIgnore()", any_spaces),
+                      group(any_spaces, "(", any_spaces, "{", any_spaces, "nlmixrIgnore()", any_spaces),
+                      group("nlmixrIgnore()", any_spaces, "}", any_spaces, ")")))
+  .pred <- sapply(pred.txt, function(x){
+    regexpr(.reg, x) != -1
+  })
+  if (all(.pred)){
+    stop("There must be at least one prediction in the model({}) block.  Use `~` for predictions")
+  }
   pred <- new.fn(pred.txt);
   do.pred <- 0;
   err <- new.fn(.deparse(f(body(fun))));
@@ -1680,12 +1783,15 @@ nlmixrUIModel <- function(fun, ini=NULL, bigmodel=NULL){
     }
     w <- which(regexpr(reg, rx.txt, perl=TRUE) != -1);
     w <- max(w);
-    if (any(regexpr(rex::rex(start,any_spaces,
-                             or("d/dt(", "f(", "F(", "dur(", "d(",
-                                "lag(", "alag(", "r(", "rate(",
-                                group("(0)", any_spaces, or("=", "<-")))),
-                    rx.txt[1:w], perl=TRUE) != -1)){
-      stop("Mixed estimation types and ODEs.")
+    if (any(regexpr(.regRx, rx.txt[1:w], perl=TRUE) != -1)){
+        if (length(rx.txt) == w){
+            tmp <- RxODE::rxGetModel(paste(rx.txt, collapse="\n"))
+            tmp <- paste(tmp$params, "=", tmp$params)
+            w <- length(tmp);
+            rx.txt <- c(tmp, rx.txt);
+        } else {
+            stop("Mixed estimation types and ODEs.")
+        }
     }
     rx.ode <- rx.txt[-(1:w)];
     rx.pred <- try(eval(parse(text=paste(c("function() {", rx.txt[1:w], "}"), collapse="\n"))), silent=TRUE)
@@ -1706,11 +1812,7 @@ nlmixrUIModel <- function(fun, ini=NULL, bigmodel=NULL){
             stop("else if are not supported in nlmixr");
           }
         }
-        if (any(regexpr(rex::rex(start,any_spaces,
-                             or("d/dt(", "f(", "F(", "dur(", "d(",
-                                "lag(", "alag(", "r(", "rate(",
-                                group("(0)", any_spaces, or("=", "<-")))),
-                        rx.pred, perl=TRUE) != -1)){
+        if (any(regexpr(.regRx, rx.pred, perl=TRUE) != -1)){
           stop("Mixed estimation types and ODEs #2.")
         }
       } else {
@@ -2135,6 +2237,21 @@ nlmixrUI.nlmefun <- function(object, mu.type=c("thetas", "covariates", "none")){
   }
   return(fn)
 }
+##' Return dynmodel variable translation function
+##'
+##' @param object nlmixr ui object
+##' @return nlmixr dynmodel translation
+##' @author Matthew Fidler
+nlmixrUI.dynmodelfun <- function(object){
+    .fn <- nlmixrUI.nlmefun(object, "none");
+    .fn <- deparse(body(.fn))
+    .fn[1] <- paste0("{\n.env <-environment();\nsapply(names(..par),function(x){assign(x,setNames(..par[x],NULL),envir=.env)})\n");
+    .fn[length(.fn)] <- paste("return(unlist(as.list(environment())))}");
+    .fn <- eval(parse(text=paste0("function(..par)", paste(.fn, collapse="\n"))))
+    return(.fn)
+}
+
+
 ##' Get the variance for the nlme fit process based on UI
 ##'
 ##' @param object UI object
@@ -2713,6 +2830,8 @@ nlmixrUI.poped.ff_fun <- function(obj){
     return(x$model);
   } else if (arg == "nlme.fun.mu"){
     return(nlmixrUI.nlmefun(obj, "thetas"))
+  } else if (arg == "dynmodel.fun"){
+    return(nlmixrUI.dynmodelfun(obj))
   } else if (arg == "nlme.fun"){
     return(nlmixrUI.nlmefun(obj, "none"))
   } else if (arg == "nlme.fun.mu.cov"){
@@ -2859,6 +2978,6 @@ str.nlmixrUI <- function(object, ...){
 
 
 ## Local Variables:
-## ess-indent-level: 2
+## ess-indent-offset: 2
 ## indent-tabs-mode: nil
 ## End:
