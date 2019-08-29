@@ -12,7 +12,7 @@ Suggests: knitr, rmarkdown, dplyr, data.table, lbfgsb3c, testthat,
         madness, devtools, expm, matrixcalc, reshape2, nloptr, ucminf,
         Rvmmin, broom.mixed, dotwhisker, officer, pkgdown, gridExtra,
         xpose, drake (>= 7.5.2)
-Version: 1.1.1-1
+Version: 1.1.1-2
 Authors@R: c(person("Matthew","Fidler",
       role = "aut", email = "matthew.fidler@gmail.com",
       comment=c(ORCID="0000-0001-8538-6691")),
@@ -63,7 +63,7 @@ LazyData: true
 VignetteBuilder: knitr
 RoxygenNote: 6.1.1
 Biarch: true
-Packaged: 2019-08-23 14:03:50 UTC; annie
+Packaged: 2019-08-28 11:35:02 UTC; annie
 Maintainer: Wenping Wang <wwang8198@gmail.com>
 Author: Matthew Fidler [aut] (<https://orcid.org/0000-0001-8538-6691>),
   Yuan Xiong [aut],
@@ -86,4 +86,4 @@ Author: Matthew Fidler [aut] (<https://orcid.org/0000-0001-8538-6691>),
   Bill Denney [ctb] (<https://orcid.org/0000-0002-5759-428X>),
   Katharine Mullen [cph]
 Repository: CRAN
-Date/Publication: 2019-08-23 15:20:03 UTC
+Date/Publication: 2019-08-29 12:10:03 UTC

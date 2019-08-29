@@ -2,8 +2,6 @@
 ## To allow nlmixr to reload runs without large run times
 ## To run the actual models on your system, take the save options off.
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
-options(nlmixr.save=TRUE,
-        nlmixr.save.dir=system.file(package="nlmixr"));
 
 ## ------------------------------------------------------------------------
 
@@ -28,18 +26,21 @@ one.cmt <- function() {
         eta.ka ~ 0.6
         eta.cl ~ 0.3
         eta.v ~ 0.1
-        add.err <- 0.7
+        add.sd <- 0.7
     })
     model({
         ka <- exp(tka + eta.ka)
         cl <- exp(tcl + eta.cl)
         v <- exp(tv + eta.v)
-        linCmt() ~ add(add.err)
+        linCmt() ~ add(add.sd)
     })
 }
 
 ## ------------------------------------------------------------------------
-fit <- nlmixr(one.cmt, theo_sd, est="nlme")
+dir <- system.file(package="nlmixr");
+
+## ------------------------------------------------------------------------
+fit <- readRDS(file.path(dir,"fit.rds"))
 print(fit)
 
 ## ------------------------------------------------------------------------
@@ -51,7 +52,7 @@ one.compartment <- function() {
         eta.ka ~ 0.6
         eta.cl ~ 0.3
         eta.v ~ 0.1
-        add.err <- 0.7
+        add.sd <- 0.7
     })
     model({
         ka <- exp(tka + eta.ka)
@@ -60,15 +61,17 @@ one.compartment <- function() {
         d/dt(depot) = -ka * depot
         d/dt(center) = ka * depot - cl / v * center
         cp = center / v
-        cp ~ add(add.err)
+        cp ~ add(add.sd)
     })
 }
 
 ## ------------------------------------------------------------------------
-fit <- nlmixr(one.compartment, theo_sd, est="saem")
+fit2 <- readRDS(file.path(dir,"fit2.rds")); # This saves the rds file for running quickly
+print(fit2)
 
 ## ------------------------------------------------------------------------
-fitF <- nlmixr(one.compartment, theo_sd, est="focei")
+fitF <- readRDS(file.path(dir,"fitF.rds")); # This saves the rds file for running quickly
+print(fitF)
 
 ## ------------------------------------------------------------------------
 plot(fit)
@@ -84,8 +87,8 @@ traceplot(fit)
 
 ## ------------------------------------------------------------------------
 
-iter <- fit$par.hist.stacked
-iter$Parameter[iter$par=="add.err"] <- "Additive error"
+iter <- fit2$par.hist.stacked
+iter$Parameter[iter$par=="add.sd"] <- "Additive error"
 iter$Parameter[iter$par=="eta.cl"]  <- "IIV CL/F"
 iter$Parameter[iter$par=="eta.v"]   <- "IIV V/F"
 iter$Parameter[iter$par=="eta.ka"]  <- "IIV ka"
@@ -106,8 +109,8 @@ ggplot(iter, aes(iter, val)) +
 
 ## ------------------------------------------------------------------------
 
-etas <- data.frame(eta = c(fit$eta$eta.ka, fit$eta$eta.cl, fit$eta$eta.v),
-                   lab = rep(c("eta(ka)", "eta(CL/F)", "eta(V/F)"), each=nrow(fit$eta)))
+etas <- data.frame(eta = c(fit2$eta$eta.ka, fit2$eta$eta.cl, fit2$eta$eta.v),
+                   lab = rep(c("eta(ka)", "eta(CL/F)", "eta(V/F)"), each=nrow(fit2$eta)))
 etas$lab <- ordered(etas$lab, c("eta(CL/F)","eta(V/F)","eta(ka)"))
 
 ggplot(etas, aes(eta)) +
