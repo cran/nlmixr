@@ -960,6 +960,7 @@ nlmixrUIModel <- function(fun, ini=NULL, bigmodel=NULL){
   theta.ord <- c();
   eta.names <- c();
   .mu.ref <- list();
+  .oneTheta <- c();
   cov.ref <- list();
   cov.theta  <- c();
   log.theta <- c();
@@ -1053,16 +1054,19 @@ nlmixrUIModel <- function(fun, ini=NULL, bigmodel=NULL){
       errn <- errn + 1;
       if (!is.na(.tmp)){
         ## FIXME: allow numeric estimates...?
-        stop("Distribution parameters cannot be numeric, but need to be estimated.")
+        stop("Distribution parameters cannot be numeric, but need to be estimated")
       }
       .w <- which(bounds$name == distArgs[.i]);
+      if (length(.w) == 0){
+          stop("Residual distribution parameter(s) estimates were not found in ini block");
+      }
       .tmp <- as.data.frame(bounds);
       .tmp$err[.w] <- ifelse(.i == 1, distName, paste0(distName, .i));
       if (any(distName==distsPositive)){
-        if (is.na(.tmp$lower[.w]) || is.infinite(.tmp$lower[.w])){
+        if (any(is.na(.tmp$lower[.w])) || any(is.infinite(.tmp$lower[.w]))){
           .tmp$lower[.w]  <- 0;
         }
-        if (.tmp$lower[.w] < 0 || .tmp$est[.w] < 0 || .tmp$upper[.w] < 0){
+        if ((.tmp$lower[.w] < 0) || .tmp$est[.w] < 0 || .tmp$upper[.w] < 0){
           stop(sprintf("The distribution '%s' must have positive parameter estimates",distName));
         }
       }
@@ -1356,6 +1360,10 @@ nlmixrUIModel <- function(fun, ini=NULL, bigmodel=NULL){
           }
         }
         find.log(x[[2]])
+        if (length(x[[2]]) == 1 && any.theta.names(as.character(x[[2]]), theta.names)){
+          tmp <- as.character(x[[2]])
+          .oneTheta <<- unique(c(.oneTheta, tmp))
+        }
         return(as.call(lapply(x, f)))
       } else if (identical(x[[1]], quote(`+`)) ||
                  identical(x[[1]], quote(`-`))){
@@ -1425,6 +1433,8 @@ nlmixrUIModel <- function(fun, ini=NULL, bigmodel=NULL){
               tmp[[as.character(x[[2]])]] <- as.character(x[[3]]);
               ## assign("mu.ref", tmp, this.env);
               .mu.ref <<- tmp
+              tmp <- as.character(x[[3]])
+              .oneTheta <<- unique(c(.oneTheta, tmp))
               ## Collapse to THETA
               return(x[[3]])
             } else if (any.theta.names(as.character(x[[3]]), eta.names) &&
@@ -1434,6 +1444,8 @@ nlmixrUIModel <- function(fun, ini=NULL, bigmodel=NULL){
               tmp[[as.character(x[[3]])]] <- as.character(x[[2]]);
               ## assign(".mu.ref", tmp, this.env)
               .mu.ref <<- tmp
+              tmp <- as.character(x[[2]])
+              .oneTheta <<- unique(c(.oneTheta, tmp))
               ## Collapse to THETA
               ## model$omega=diag(c(1,1,0))
               ## 0 is not estimated.
@@ -1457,6 +1469,8 @@ nlmixrUIModel <- function(fun, ini=NULL, bigmodel=NULL){
                 tmp[[eta]] <- th;
                 ## assign("tmp", .mu.ref, this.env)
                 .mu.ref <<- tmp
+                tmp <- as.character(th)
+                .oneTheta <<- unique(c(.oneTheta, tmp))
                 return(f(as.call(x[[2]])));
               }
             } else if (length(x) < 3) {
@@ -1490,6 +1504,8 @@ nlmixrUIModel <- function(fun, ini=NULL, bigmodel=NULL){
                 tmp[[.etas]] <- theta;
                 ## assign("tmp", .mu.ref, this.env);
                 .mu.ref <<- tmp
+                tmp <- as.character(theta)
+                .oneTheta <<- unique(c(.oneTheta, tmp))
                 x[[2]] <- new;
               }
             }
@@ -2137,7 +2153,7 @@ nlmixrUIModel <- function(fun, ini=NULL, bigmodel=NULL){
                           predDf=.predDf, predSaem =.predSaem, env=env, predSys=.pred,
                           noMuEtas=.no.mu.etas,
                           saemErr=.saemErr, cmtEndpoints=.cmtEndpoints,
-                          extra=.extra))
+                          oneTheta=.oneTheta, extra=.extra))
   if (.linCmt){
     ret$nmodel$lin.solved <- TRUE
   } else {
@@ -2793,9 +2809,9 @@ nlmixUI.logThetasList  <- function(obj){
   .ini <- as.data.frame(obj$ini);
   .logThetas <- as.integer(which(setNames(sapply(obj$focei.names,function(x)any(x==obj$log.theta)),NULL)));
   .thetas  <- .ini[!is.na(.ini$ntheta),]
-  .cov  <- obj$cov.theta
-  .covThetas <- .thetas[.thetas$name %in% .cov,"ntheta"]
-  .logThetasF <- setdiff(.logThetas, .covThetas)
+  .one <- obj$oneTheta
+  .logThetasF <- .thetas[.thetas$name %in% .one,"ntheta"]
+  .logThetasF <- intersect(.logThetas, .logThetasF)
   list(.logThetas, .logThetasF);
 }
 
@@ -2821,6 +2837,7 @@ nlmixrUI.poped.ff_fun <- function(obj){
 ##' @export
 `$.nlmixrUI` <- function(obj, arg, exact = TRUE){
   x <- obj;
+  .cls <- class(x)
   class(x) <- "list"
   if (arg == "ini"){
     return(x$ini);
@@ -2917,6 +2934,7 @@ nlmixrUI.poped.ff_fun <- function(obj){
   } else if (arg == "multipleEndpoint"){
       return(nlmixrUI.multipleEndpoint(x));
   } else if (arg=="muRefTable"){
+      class(x) <- .cls
       return(.nmMuTable(x));
   }
   m <- x$ini;
