@@ -1842,6 +1842,10 @@ foceiFit.data.frame0 <- function(data,
     .omdf$upper <- with(.omdf, ifelse(a < b, b, a))
     .omdf$upper <- with(.omdf, ifelse(upper == m, Inf, upper));
     .omdf$upper <- with(.omdf, ifelse(!diag, Inf, upper));
+    .ret$control$ntheta <- length(lower)
+    .ret$control$nomega <- length(.omdf$lower)
+    .ret$control$neta <- sum(.omdf$diag)
+    .ret$control$nfixed <- sum(fixed);
     lower <- c(lower, .omdf$lower)
     upper <- c(upper, .omdf$upper)
 
@@ -2150,7 +2154,9 @@ print.nlmixrClass <- function(x, ...){
 ##' @export
 `$.nlmixrFitCore` <- function(obj, arg, exact = FALSE){
     .env <- obj;
-    if (any(arg == c("logLik", "value", "obf", "ofv", "objf", "OBJF", "objective", "AIC", "BIC"))){
+    if (any(arg == c("logLik", "value", "obf", "ofv",
+                     "objf", "OBJF", "objective", "AIC",
+                     "BIC"))) {
         if (!is.null(obj$saem)){
             .tmp <- obj$saem;
             .curObj <- get("objective",.env);
@@ -2689,7 +2695,7 @@ print.nlmixrGill83 <- function(x, ...){
     .nms <- names(.lt);
     .lt <- sprintf("%s%s", formatC(signif(.lt, digits=.digs),digits=.digs,format="fg", flag="#"), .lts)
     names(.lt) <- .nms;
-    .lt <- gsub(rex::rex("\""), "", paste0("    ", R.utils::captureOutput(print(.lt))));
+    .lt <- gsub(rex::rex("\""), "", paste0("    ", .captureOutput(print(.lt))));
     if (crayon::has_color()){
         .lt <- gsub(rex::rex(capture(.regNum), ">"), "  \033[1m\033[31m\\1 \033[39m\033[22m", .lt, perl=TRUE)
         .lt <- gsub(rex::rex(capture(.regNum), "="), "  \033[1m\033[32m\\1 \033[39m\033[22m", .lt, perl=TRUE)
@@ -2760,7 +2766,8 @@ print.nlmixrFitCore <- function(x, ...){
     } else {
         cat(paste0("\n", cli::rule(paste0(crayon::bold("Population Parameters"), " (", crayon::bold$blue("$parFixed"), " or ", crayon::bold$blue("$parFixedDf"), "):"))),"\n")
     }
-    .pf <- R.utils::captureOutput(print(x$parFixed))
+    .file <- raw(0L)
+    .pf <- .captureOutput(print(x$parFixed))
     if (crayon::has_color()){
         .pf <- gsub(rex::rex(capture(.regNum), "%>"), "\033[1;31m\\1%\033[0m ", .pf, perl=TRUE)
         .pf <- gsub(rex::rex(capture(.regNum), "%="), "\033[1;32m\\1%\033[0m ", .pf, perl=TRUE)
@@ -3242,6 +3249,22 @@ setOfv <- function(x, type){
     } else {
         stop("Wrong type of object.");
     }
+}
+
+##' @importFrom utils capture.output
+.captureOutput <- function (expr, envir = parent.frame()) {
+    eval({
+        .file <- rawConnection(raw(0L), open = "w")
+        on.exit({
+            if (!is.null(.file)) close(.file)
+        })
+        capture.output(expr, file = .file)
+        .ret <- rawConnectionValue(.file)
+        close(.file)
+        .file <- NULL
+        .ret <- rawToChar(.ret)
+        return(.ret)
+    }, envir = envir, enclos = envir)
 }
 
 ##  LocalWords:  covariance
