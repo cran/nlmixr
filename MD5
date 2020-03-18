@@ -1,4 +1,4 @@
-716816da9e313b2a71c1b19fa58b0c04 *DESCRIPTION
+f908da8694f5cdf0c447a9afae85215f *DESCRIPTION
 c1050d06c89d2237631b8abf661be5e7 *NAMESPACE
 9711c8f96ac4b1acadfba395fae57f89 *NEWS.md
 e9b87a31b18674a3f281741fea1b0c8c *R/000.R
@@ -218,7 +218,7 @@ ed0c3ed0b27c01fd6569de3342daa621 *src/RcppExports.cpp
 6076dbdac367f18993aaac0402eb8595 *src/evaluate.h
 3c323e2ebf71541e539b5e803f16618b *src/init.c
 ddd743fa8cf95b375cd2261b672eb2d6 *src/inner.cpp
-7cc596287d4232f4fd24e005d46aa24d *src/jj.c
+b38b67131363f2e42e2c77a7d3384336 *src/jj.c
 4ef357fcf6d0a6dcaae22c7e1d376bbf *src/jj.g.d_parser.c
 a1ba6db1fe1c49076aae0dd73420d3e4 *src/jj_new.c
 92bb57a30766060b9682badfd0ea188b *src/lbfgsR.c
@@ -240,7 +240,7 @@ ea43a9101a3f52d35f66ffebb42f8521 *tests/testthat/Infusion_1CPTMM.csv
 2eabe1379687efa4f9dde0157e2fad77 *tests/testthat/Oral_2CPTMM.csv
 6ad94dba336bff76d9d2ffb1a7161e60 *tests/testthat/fn.txt
 739fccb02b0851d3055d6b78600a368e *tests/testthat/setup-verbose_minimization.R
-d79c9b92500ae43ee433421a67f5d497 *tests/testthat/test-281.R
+782ce9f2a7b0fa02cc4e803d4d7ea732 *tests/testthat/test-281.R
 87ea9bda80b3e3638e3510cb3665eadc *tests/testthat/test-back-transform.R
 f1faf8d203bf87678bf7222b2ef08023 *tests/testthat/test-bounds.R
 8deac8fd85ca92d689285e717e2ea2ab *tests/testthat/test-broom.R
