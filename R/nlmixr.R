@@ -1,3 +1,6 @@
+.onLoad <- function(libname, pkgname){
+}
+
 orig.onAttach <- function(libname, pkgname){
     ## nocov start
     ## Setup RxODE.prefer.tbl
@@ -64,7 +67,6 @@ nlmixrForget <- function(){
 ##' @importFrom parallel mclapply
 ##' @importFrom methods is
 ##' @importFrom Rcpp evalCpp
-##' @importFrom vpc vpc
 ##' @importFrom ggplot2 ggplot aes geom_point facet_wrap geom_line geom_abline xlab geom_smooth aes_string
 ##' @importFrom RcppArmadillo armadillo_version
 ##' @useDynLib nlmixr, .registration=TRUE
