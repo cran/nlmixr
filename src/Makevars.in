@@ -8,13 +8,13 @@ SH=`"$(R_HOME)/bin$(R_ARCH_BIN)/Rscript" -e 'cat(file.path(find.package("StanHea
 CXX_STD     = CXX14
 @CXX14STD@
 
-PKG_LIBS = $(LAPACK_LIBS) $(BLAS_LIBS) $(FLIBS)
-PKG_CXXFLAGS = -Id -I../inst/include -DBOOST_DISABLE_ASSERTS -@ISYSTEM@"$(BH)" -@ISYSTEM@"$(EG)" -@ISYSTEM@"$(SH)" -@ISYSTEM@"$(RCPP)" -@ISYSTEM@"$(ARMA)" 
+PKG_LIBS = $(LAPACK_LIBS) $(BLAS_LIBS) $(FLIBS) $(SHLIB_OPENMP_CXXFLAGS)
+PKG_CXXFLAGS = -Id -I../inst/include -DBOOST_DISABLE_ASSERTS -DBOOST_NO_CXX11_STATIC_ASSERT -@ISYSTEM@"$(BH)" -@ISYSTEM@"$(EG)" -@ISYSTEM@"$(SH)" -@ISYSTEM@"$(RCPP)" -@ISYSTEM@"$(ARMA)"  $(SHLIB_OPENMP_CXXFLAGS)
 SHLIB_LDFLAGS = $(SHLIB_CXXLDFLAGS) 
 SHLIB_LD = $(SHLIB_CXXLD)
-SOURCES_C = jj.c jj.g.d_parser.c init.c rprintf.c merge3.c lbfgsR.c
-SOURCES_CPP = neldermead.cpp slice.cpp RcppExportMod.cpp ode_cmt1.cpp RcppExports.cpp resid.cpp inner.cpp saem.cpp
-OBJECTS = $(SOURCES_C:.c=.o) $(SOURCES_CPP:.cpp=.o)
+SOURCES_C = init.c rprintf.c merge3.c lbfgsR.c utilc.c
+SOURCES_CPP = npde.cpp shrink.cpp ires.cpp res.cpp cwres.cpp censResid.cpp cholse.cpp saem.cpp neldermead.cpp resid.cpp inner.cpp  slice.cpp RcppExportMod.cpp ode_cmt1.cpp RcppExports.cpp
+OBJECTS = $(SOURCES_CPP:.cpp=.o) $(SOURCES_C:.c=.o) 
 
 all: $(SHLIB)
 $(SHLIB): $(OBJECTS)

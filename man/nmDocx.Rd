@@ -82,7 +82,7 @@ An officer docx object
 Create a run summary word document
 }
 \examples{
-\dontrun{
+\donttest{
  library(nlmixr)
 pheno <- function() {
     # Pheno with covariance
@@ -108,7 +108,9 @@ pheno <- function() {
 fit.s <- nlmixr(pheno, pheno_sd, "saem")
 
 ## Save output information into a word document
-nmDocx(fit.s)
+RxODE::.rxWithWd(tempdir(), # Put document in temporary directory
+  nmDocx(fit.s)
+)
 
 }
 }

@@ -2,12 +2,15 @@
 % Please edit documentation in R/nlmixr.R
 \name{nlmixrVersion}
 \alias{nlmixrVersion}
-\title{Dispaly nlmixr's version}
+\title{Display nlmixr's version}
 \usage{
 nlmixrVersion()
 }
+\value{
+Nothing, called for its side effects
+}
 \description{
-Dispaly nlmixr's version
+Display nlmixr's version
 }
 \author{
 Matthew L. Fidler

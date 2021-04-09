@@ -23,7 +23,7 @@ foceiControl(
   ssRtolSens = NULL,
   minSS = 10L,
   maxSS = 1000L,
-  maxstepsOde = 50000L,
+  maxstepsOde = 500000L,
   hmin = 0L,
   hmax = NA_real_,
   hini = 0,
@@ -47,6 +47,8 @@ foceiControl(
   covDerivMethod = c("central", "forward"),
   covMethod = c("r,s", "r", "s", ""),
   hessEps = (.Machine$double.eps)^(1/3),
+  eventFD = sqrt(.Machine$double.eps),
+  eventCentral = TRUE,
   centralDerivEps = rep(20 * sqrt(.Machine$double.eps), 2),
   lbfgsLmm = 7L,
   lbfgsPgtol = 0,
@@ -105,7 +107,8 @@ foceiControl(
   odeRecalcFactor = 10^(0.5),
   gradCalcCentralSmall = 1e-04,
   gradCalcCentralLarge = 10000,
-  etaNudge = 0.01,
+  etaNudge = qnorm(1 - 0.05/2)/sqrt(3),
+  etaNudge2 = qnorm(1 - 0.05/2) * sqrt(3/5),
   stiff,
   nRetries = 3,
   seed = 42,
@@ -113,7 +116,9 @@ foceiControl(
   etaMat = NULL,
   repeatGillMax = 3,
   stickyRecalcN = 5,
-  gradProgressOfvTime = 10
+  gradProgressOfvTime = 10,
+  addProp = c("combined2", "combined1"),
+  singleOde = TRUE
 )
 }
 \arguments{
@@ -147,14 +152,15 @@ for outer problem.}
 optimization.}
 
 \item{method}{The method for solving ODEs.  Currently this supports:
-
 \itemize{
 \item \code{"liblsoda"} thread safe lsoda.  This supports parallel
-           thread-based solving, and ignores user Jacobian specification.
+thread-based solving, and ignores user Jacobian specification.
 \item \code{"lsoda"} -- LSODA solver.  Does not support parallel thread-based
-      solving, but allows user Jacobian specification.
+solving, but allows user Jacobian specification.
 \item \code{"dop853"} -- DOP853 solver.  Does not support parallel thread-based
-        solving nor user Jacobain specification
+solving nor user Jacobain specification
+\item \code{"indLin"} -- Solving through inductive linearization.  The RxODE dll
+must be setup specially to use this solving routine.
 }}
 
 \item{transitAbs}{boolean indicating if this is a transit
@@ -165,10 +171,10 @@ by the ODE solver to determine if a good solution has been
 achieved;  This is also used in the solved linear model to check
 if prior doses do not add anything to the solution.}
 
-\item{rtol}{a numeric relative tolerance (1e-6 by default) used
+\item{rtol}{a numeric relative tolerance (\code{1e-6} by default) used
 by the ODE solver to determine if a good solution has been
 achieved. This is also used in the solved linear model to check
- if prior doses do not add anything to the solution.}
+if prior doses do not add anything to the solution.}
 
 \item{atolSens}{Sensitivity atol, can be different than atol with
 liblsoda.  This allows a less accurate solve for gradients (if desired)}
@@ -198,13 +204,15 @@ calculating if steady state has been achieved for sensitivity compartments.}
 value is 0.}
 
 \item{hmax}{The maximum absolute step size allowed.  When
-\code{hmax=NA} (default), uses the average difference (+hmaxSd*sd) in times
-and sampling events. When \code{hmax=NULL} RxODE uses the
-maximum difference in times in your sampling and events.  The
-value 0 is equivalent to infinite maximum absolute step size.}
+\code{hmax=NA} (default), uses the average difference +
+hmaxSd*sd in times and sampling events. The \code{hmaxSd} is a user
+specified parameter and which defaults to zero.  When
+\code{hmax=NULL} RxODE uses the maximum difference in times in
+your sampling and events.  The value 0 is equivalent to infinite
+maximum absolute step size.}
 
 \item{hini}{The step size to be attempted on the first step. The
-default value is determined by the solver (when hini = 0)}
+default value is determined by the solver (when \code{hini = 0})}
 
 \item{maxordn}{The maximum order to be allowed for the nonstiff
 (Adams) method.  The default is 12.  It can be between 1 and
@@ -214,25 +222,22 @@ default value is determined by the solver (when hini = 0)}
 method.  The default value is 5.  This can be between 1 and 5.}
 
 \item{cores}{Number of cores used in parallel ODE solving.  This
-defaults to the number or system cores determined by
-\code{\link[RxODE]{rxCores}} for methods that support parallel
-solving (ie thread-safe methods like "liblsoda").}
+is equivalent to calling \code{\link[RxODE:getRxThreads]{setRxThreads()}}}
 
 \item{covsInterpolation}{specifies the interpolation method for
-    time-varying covariates. When solving ODEs it often samples
-    times outside the sampling time specified in \code{events}.
-    When this happens, the time varying covariates are
-    interpolated.  Currently this can be:
-
+time-varying covariates. When solving ODEs it often samples
+times outside the sampling time specified in \code{events}.
+When this happens, the time varying covariates are
+interpolated.  Currently this can be:
 \itemize{
-\item \code{"linear"} interpolation (the default), which interpolates the covariate
-    by solving the line between the observed covariates and extrapolating the new
-    covariate value.
-\item \code{"constant"} -- Last observation carried forward.
+\item \code{"linear"} interpolation, which interpolates the covariate
+by solving the line between the observed covariates and extrapolating the new
+covariate value.
+\item \code{"constant"} -- Last observation carried forward (the default).
 \item \code{"NOCB"} -- Next Observation Carried Backward.  This is the same method
-      that NONMEM uses.
+that NONMEM uses.
 \item \code{"midpoint"} Last observation carried forward to midpoint; Next observation
-  carried backward to midpoint.
+carried backward to midpoint.
 }}
 
 \item{print}{Integer representing when the outer step is
@@ -250,7 +255,7 @@ By default this is 1.  When zero or below, no scaling is performed.}
 value.  By default this is 1.}
 
 \item{normType}{This is the type of parameter
-    normalization/scaling used to get the scaled initial valuse
+    normalization/scaling used to get the scaled initial values
     for nlmixr.  These are used with \code{scaleType} of.
 
     With the exception of \code{rescale2}, these come
@@ -284,7 +289,7 @@ value.  By default this is 1.}
 
 
 \item \code{rescale} or min-max normalization. This rescales all
-    parmeters from (0 to 1).  As in the \code{rescale2} the
+    parameters from (0 to 1).  As in the \code{rescale2} the
     relative differences are preserved.  In this approach:
 
     C_{1} = min(all unscaled values)
@@ -339,7 +344,7 @@ and the scales are specified by \code{scaleC}.
 
 \item \code{mult} This approach does not use the data
 normalization provided by \code{normType}, but rather uses
-multiplicitve scaling to a constant provided by the \code{scaleTo}
+multiplicative scaling to a constant provided by the \code{scaleTo}
 argument.
 
   In this case:
@@ -348,7 +353,7 @@ argument.
 
 \item \code{multAdd} This approach changes the scaling based on
 the parameter being specified.  If a parameter is defined in an
-exponenital block (ie exp(theta)), then it is scaled on a
+exponential block (ie exp(theta)), then it is scaled on a
 linearly, that is:
 
   v_{scaled} = (v_{current}-v_{init}) + scaleTo
@@ -441,6 +446,12 @@ derivatives while calculating the covariance components
 }}
 
 \item{hessEps}{is a double value representing the epsilon for the Hessian calculation.}
+
+\item{eventFD}{Finite difference step for forward or central
+difference estimation of event-based gradients}
+
+\item{eventCentral}{Use the central difference approximation when
+estimating event-based gradients}
 
 \item{centralDerivEps}{Central difference tolerances.  This is a
     numeric vector of relative difference and absolute difference.
@@ -619,7 +630,7 @@ initial estimate by.  So each iteration the new step size =
 (prior step size)*gillStep}
 
 \item{gillFtol}{The gillFtol is the gradient error tolerance that
-is accepable before issuing a warning/error about the gradient estimates.}
+is acceptable before issuing a warning/error about the gradient estimates.}
 
 \item{gillRtol}{The relative tolerance used for Gill 1983
 determination of optimal step size.}
@@ -688,34 +699,40 @@ where |grad| > gradCalcCentralLarge where forward differences
 switch to central differences.}
 
 \item{etaNudge}{By default initial ETA estimates start at zero;
-Sometimes this doesn't optimize appropriately.  If this value
-is non-zero, when the n1qn1 optimization didn't perform
+Sometimes this doesn't optimize appropriately.  If this value is
+non-zero, when the n1qn1 optimization didn't perform
 appropriately, reset the Hessian, and nudge the ETA up by this
-value; If the ETA still doesn't move, nudge the ETA down by
-this value.  Finally if it doesn't move, reset it to zero and
-do not perform the optimization again.  This ETA nudge is only
-done on the first ETA optimization.}
+value; If the ETA still doesn't move, nudge the ETA down by this
+value. By default this value is qnorm(1-0.05/2)*1/sqrt(3), the
+first of the Gauss Quadrature numbers times by the 0.95\% normal
+region. If this is not successful try the second eta nudge
+number (below).  If +-etaNudge2 is not successful, then assign
+to zero and do not optimize any longer}
+
+\item{etaNudge2}{This is the second eta nudge.  By default it is
+qnorm(1-0.05/2)*sqrt(3/5), which is the n=3 quadrature point
+(excluding zero) times by the 0.95\% normal region}
 
 \item{stiff}{a logical (\code{TRUE} by default) indicating whether
-    the ODE system is stiff or not.
+the ODE system is stiff or not.\preformatted{For stiff ODE systems (`stiff = TRUE`), `RxODE` uses the
+LSODA (Livermore Solver for Ordinary Differential Equations)
+Fortran package, which implements an automatic method switching
+for stiff and non-stiff problems along the integration
+interval, authored by Hindmarsh and Petzold (2003).
 
-    For stiff ODE systems (\code{stiff = TRUE}), \code{RxODE} uses the
-    LSODA (Livermore Solver for Ordinary Differential Equations)
-    Fortran package, which implements an automatic method switching
-    for stiff and non-stiff problems along the integration
-    interval, authored by Hindmarsh and Petzold (2003).
+For non-stiff systems (`stiff = FALSE`), `RxODE` uses
+DOP853, an explicit Runge-Kutta method of order 8(5, 3) of
+Dormand and Prince as implemented in C by Hairer and Wanner
+(1993).
 
-    For non-stiff systems (\code{stiff = FALSE}), \code{RxODE} uses
-    DOP853, an explicit Runge-Kutta method of order 8(5, 3) of
-    Dormand and Prince as implemented in C by Hairer and Wanner
-    (1993).}
+If stiff is not specified, the `method` argument is used instead.
+}}
 
 \item{nRetries}{If FOCEi doesn't fit with the current parameter
 estimates, randomly sample new parameter estimates and restart
 the problem.  This is similar to 'PsN' resampling.}
 
-\item{seed}{an object specifying if and how the random number
-generator should be initialized}
+\item{seed}{seed for random number generator}
 
 \item{resetThetaCheckPer}{represents objective function
 \% percentage below which resetThetaP is checked.}
@@ -733,6 +750,22 @@ the atol/rtol for the rest of the problem.}
 
 \item{gradProgressOfvTime}{This is the time for a single objective
 function evaluation (in seconds) to start progress bars on gradient evaluations}
+
+\item{addProp}{one of "combined1" and "combined2"; These are the
+two forms of additive+proportional errors supported by
+monolix/nonmem:
+
+combined1: transform(y)=transform(f)+(a+b*f^c)*eps
+
+combined2: transform(y)=transform(f)+(a^2+b^2*f^(2c))*eps}
+
+\item{singleOde}{This option allows a single ode model to include
+the PK parameter information instead of splitting it into a
+function and a RxODE model}
+}
+\value{
+The control object that changes the options for the FOCEi
+  family of estimation methods
 }
 \description{
 Control Options for FOCEi

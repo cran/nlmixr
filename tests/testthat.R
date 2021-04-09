@@ -1,6 +1,9 @@
-Sys.setenv("R_TESTS" = "")
-Sys.setenv("nlmixr_silent"="TRUE")
 library(testthat)
+library(RxODE)
 library(nlmixr)
+verbose_minimization <- FALSE
 
-test_check("nlmixr")
+test_check("nlmixr", stop_on_failure = FALSE, wrap=TRUE,
+           reporter = testthat::LocationReporter)
+
+

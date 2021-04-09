@@ -68,10 +68,10 @@ by the ODE solver to determine if a good solution has been
 achieved;  This is also used in the solved linear model to check
 if prior doses do not add anything to the solution.}
 
-\item{rtol}{a numeric relative tolerance (1e-6 by default) used
+\item{rtol}{a numeric relative tolerance (\code{1e-6} by default) used
 by the ODE solver to determine if a good solution has been
 achieved. This is also used in the solved linear model to check
- if prior doses do not add anything to the solution.}
+if prior doses do not add anything to the solution.}
 
 \item{maxsteps}{maximum number of (internally defined) steps allowed
 during one call to the solver. (5000 by default)}
@@ -80,13 +80,15 @@ during one call to the solver. (5000 by default)}
 value is 0.}
 
 \item{hmax}{The maximum absolute step size allowed.  When
-\code{hmax=NA} (default), uses the average difference (+hmaxSd*sd) in times
-and sampling events. When \code{hmax=NULL} RxODE uses the
-maximum difference in times in your sampling and events.  The
-value 0 is equivalent to infinite maximum absolute step size.}
+\code{hmax=NA} (default), uses the average difference +
+hmaxSd*sd in times and sampling events. The \code{hmaxSd} is a user
+specified parameter and which defaults to zero.  When
+\code{hmax=NULL} RxODE uses the maximum difference in times in
+your sampling and events.  The value 0 is equivalent to infinite
+maximum absolute step size.}
 
 \item{hini}{The step size to be attempted on the first step. The
-default value is determined by the solver (when hini = 0)}
+default value is determined by the solver (when \code{hini = 0})}
 
 \item{maxordn}{The maximum order to be allowed for the nonstiff
 (Adams) method.  The default is 12.  It can be between 1 and
@@ -101,10 +103,13 @@ method.  The default value is 5.  This can be between 1 and 5.}
 
 \item{...}{additional nlme options}
 }
+\value{
+nlmixr nlme fit
+}
 \description{
 'nlme_ode' fits a mixed-effect model described using ordinary differential
 equation (ODEs). The ODE-definition follows RxODE syntax.
-Specification of fixed effects, random effects and intial values follows
+Specification of fixed effects, random effects and initial values follows
 the standard nlme notations.
 }
 \details{
@@ -174,13 +179,12 @@ The ODE-based model specification may be coded inside a character
 }
 
 \examples{
-\dontrun{
+\donttest{
 library(nlmixr)
 ode <- "
 d/dt(depot) =-KA*depot;
 d/dt(centr) = KA*depot - KE*centr;
 "
-dat <- read.table(system.file("examples/theo_md.txt", package = "nlmixr"), head=TRUE)
 mypar <- function(lKA, lKE, lCL)
 {
     KA=exp(lKA)
@@ -189,12 +193,12 @@ mypar <- function(lKA, lKE, lCL)
     V = CL/KE
 }
 
-specs <- list(fixed=lKA+lKE+lCL~1, random = pdDiag(lKA+lCL~1),
+specs <- list(fixed=lKA+lKE+lCL~1,
+     random = pdDiag(lKA+lCL~1),
      start=c(lKA=0.5, lKE=-2.5, lCL=-3.2))
 
 fit <- nlme_ode(theo_md, model=ode, par_model=specs, par_trans=mypar,
-     response="centr", response.scaler="V",control=nlmeControl(pnlsTol=0.1))
-
+     response="centr", response.scaler="V",control=nlmeControl(pnlsTol=0.9))
 }
 }
 \author{

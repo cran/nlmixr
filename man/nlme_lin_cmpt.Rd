@@ -66,6 +66,9 @@ nlmeLinCmt(
 
 \item{...}{additional nlme options}
 }
+\value{
+A nlmixr nlme fit object
+}
 \description{
 'nlme_lin_cmpt' fits a linear one to three compartment model with
 either first order absorption, or i.v. bolus, or i.v. infusion.  A
@@ -73,13 +76,14 @@ user specifies the number of compartments, route of drug
 administrations, and the model parameterization. `nlmixr` supports
 the clearance/volume parameterization and the micro constant
 parameterization, with the former as the default.  Specification of
-fixed effects, random effects and intial values follows the standard
+fixed effects, random effects and initial values follows the standard
 nlme notations.
 }
 \examples{
 library(nlmixr)
 
-specs <- list(fixed=lKA+lCL+lV~1, random = pdDiag(lKA+lCL~1), start=c(lKA=0.5, lCL=-3.2, lV=-1))
+specs <- list(fixed=lKA+lCL+lV~1, random = pdDiag(lKA+lCL~1),
+              start=c(lKA=0.5, lCL=-3.2, lV=-1))
 fit <- nlme_lin_cmpt(theo_md, par_model=specs, ncmt=1, verbose=TRUE)
 #plot(augPred(fit,level=0:1))
 summary(fit)

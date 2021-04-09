@@ -6,6 +6,25 @@ magrittr::`%>%`
 ##' @export
 RxODE::RxODE
 
+
+##' @importFrom RxODE logit
+##' @export
+RxODE::logit
+
+##' @importFrom RxODE expit
+##' @export
+RxODE::expit
+
+
+##' @importFrom RxODE probit
+##' @export
+RxODE::probit
+
+##' @importFrom RxODE probitInv
+##' @export
+RxODE::probitInv
+
+
 ##' @importFrom RxODE rxSolve
 ##' @export
 RxODE::rxSolve
@@ -72,10 +91,6 @@ RxODE::add.dosing
 ##' @importFrom RxODE add.sampling
 ##' @export
 RxODE::add.sampling
-
-##' @importFrom RxODE rxPermissive
-##' @export
-RxODE::rxPermissive
 
 ##' @importFrom nlme pdDiag
 ##' @export
@@ -173,33 +188,32 @@ RxODE::rxSymPySetupPred
 ##' @export
 RxODE::et
 
-
-##'@importFrom generics tidy
-##'@export
-generics::tidy
-
-
-##'@importFrom generics glance
-##'@export
-generics::glance
-
-##'@importFrom generics glance
-##'@export
-generics::glance
-
-##'@importFrom generics augment
-##'@export
-generics::augment
-
-##'@importFrom RxODE rxParams
-##'@export
+##' @importFrom RxODE rxParams
+##' @export
 RxODE::rxParams
 
-##'@importFrom RxODE rxParam
-##'@export
+##' @importFrom RxODE rxParam
+##' @export
 RxODE::rxParam
 
 
-##'@importFrom RxODE et
-##'@export
+##' @importFrom RxODE et
+##' @export
 RxODE::et
+
+##' @importFrom RxODE geom_cens
+##' @export
+RxODE::geom_cens
+
+##' @importFrom RxODE geom_amt
+##' @export
+RxODE::geom_amt
+
+
+##' @importFrom RxODE stat_cens
+##' @export
+RxODE::stat_cens
+
+##' @importFrom RxODE stat_amt
+##' @export
+RxODE::stat_amt

@@ -9,6 +9,9 @@ foceiFitCpp_(e)
 \arguments{
 \item{e}{Enviornment}
 }
+\value{
+A focei fit object
+}
 \description{
 This shouldn't be called directly.
 }
