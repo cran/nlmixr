@@ -1,3 +1,19 @@
+.resetCacheIfNeeded <- function() {
+  .wd <- RxODE::rxTempDir()
+  if (.wd != "") {
+    .md5File <- file.path(.wd, "nlmixr.md5")
+    if (file.exists(.md5File)) {
+      .md5 <- readLines(.md5File)
+      if (.md5 != nlmixr.md5) {
+        packageStartupMessage("detected new version of nlmixr, cleaning RxODE cache")
+        RxODE::rxClean()
+      }
+    } else {
+      writeLines(nlmixr.md5, .md5File)
+    }
+  }
+}
+
 .onLoad <- function(libname, pkgname) {
   backports::import(pkgname)
   if (requireNamespace("generics", quietly = TRUE)) {
@@ -8,6 +24,7 @@
     RxODE::.s3register("generics::augment", "nlmixrFitCore")
     RxODE::.s3register("generics::augment", "nlmixrFitCoreSilent")
   }
+  .resetCacheIfNeeded()
 }
 
 compiled.RxODE.md5 <- RxODE::rxMd5()
@@ -674,6 +691,17 @@ saemControl <- function(seed = 99,
     nEm <- .xtra$n.em
     .rm <- c(.rm, "n.em")
   }
+  if (inherits(addProp, "numeric")) {
+    if (addProp == 1) {
+      addProp <- "combined1"
+    } else if (addProp == 2) {
+      addProp <- "combined2"
+    } else {
+      stop("addProp must be 1, 2, \"combined1\" or \"combined2\"", call.=FALSE)
+    }
+  } else {
+    addProp <- match.arg(addProp)
+  }
   .ret <- list(
     mcmc = list(niter = c(nBurn, nEm), nmc = nmc, nu = nu),
     ODEopt = RxODE::rxControl(
@@ -688,7 +716,7 @@ saemControl <- function(seed = 99,
     nnodes.gq = nnodes.gq,
     nsd.gq = nsd.gq,
     adjObf = adjObf,
-    addProp = match.arg(addProp),
+    addProp = addProp,
     singleOde = singleOde,
     itmax = itmax,
     tol = tol,
@@ -1128,7 +1156,7 @@ nlmixrEst.focei <- function(env, ...) {
     .FoceiInits <- uif$focei.inits
     if (.nid == 1) {
       if (length(.FoceiInits$OMGA) > 0) {
-        stop("a mixed effect model requires more than one subject/id", call.=FALSE)
+        stop("a mixed effect model requires more than one subject/id\na population estimate requires no etas", call.=FALSE)
       }
     }
     fit <- foceiFit(dat,

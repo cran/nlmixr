@@ -1,6 +1,6 @@
-ad219edabbf79d408230b95151023ae1 *DESCRIPTION
+18732204e00b8aaf52c11da66cb93492 *DESCRIPTION
 b42fb483391bc26571b1d699e4cbd2ea *NAMESPACE
-c7e9b892be897fcf696d61af266db368 *NEWS.md
+02a5c283f7d1499d59da89b9beee53b1 *NEWS.md
 e10dad0413fc5d400ae260ffcc225081 *R/000.R
 4471c24cffb2dd5df4f246f37c85cbcb *R/RcppExports.R
 113f86a01218c89e727f7915d9cb6455 *R/RcppManualExports.R
@@ -23,7 +23,7 @@ da2d49101609ad97f937e77e98bcec51 *R/data_bolus_2CPTMM.R
 984028daa78dd8f18fc270a5e364653a *R/data_theo_sd.R
 9bb9644da5caf0782549dd467fca1af1 *R/data_warfarin.R
 2ca94fb44cb8c167e67e563424329102 *R/dynmodel.R
-4160ca368e903584bf34e283c2f9ecb5 *R/foceiFit.R
+de561c2c09bda078081f8d04e0ffbec0 *R/foceiFit.R
 aeaa5d99564725e6b2c2b2037518a1d0 *R/gauss.quad.R
 93cbe17d64d95aa66673e596e727cc2e *R/gnlmm.R
 0bb7e373a79acf57fdeb502e04d7a404 *R/gnlmm2.R
@@ -34,7 +34,7 @@ fd79e6199d1bd4b96b11b66fdd132ef2 *R/md5.R
 9eaa3c36aa40e51a7f9c0de2b519c867 *R/metabolite.R
 006c320a6b5b842b961751af6246eb5d *R/nlme_fit.R
 bda2445802a09934f7c94e84960d33bb *R/nlme_fit_gen.R
-9444b537d3b5110cde02767944728a69 *R/nlmixr.R
+2fc594b3ad7ec8cda54de3f08a9a60d8 *R/nlmixr.R
 7e618727e15883e72f0d75844582e0a8 *R/nlmixrGrad.R
 7f008700efae57c5b598a9415ac85ede *R/npde.R
 1639cb401b963b992b44c63512c0d3da *R/ofv.R
@@ -50,7 +50,7 @@ bdde780133e470d63365799ca385b730 *R/pump.R
 0eb82706d415dc83f8bb06efeddc833b *R/saem_fit_aux.R
 3ba40c7629ef8f5d920099a4ba118a8b *R/simulate.R
 048e7ad5619e57406fc21b0ae883a43e *R/sourceCppFunction.R
-eeaecda345fdaae27c385fc62dc7654a *R/ui.R
+dc44c08afe83db57c71a76f87ceee23b *R/ui.R
 cbd85478ed89d47c35ea64416636c4fb *R/utils.R
 9f90e34ac046f36627fbbdd093d55728 *R/validate.R
 8700fd81467552b47cd73ebb07a592dc *R/vpc.R
@@ -89,7 +89,7 @@ cbe69eecdbdda92d1a41d528637d6897 *inst/include/nlmixr_types.h
 125626dc74cad609fb34e26818355d31 *inst/revision.txt
 6c845206889a7bb9fe42827374650076 *inst/tools/stripper
 f426ad4fb45445dc5eebf38b31326cb2 *inst/tools/stripper.R
-59368a3ee408d7bdb38b5be90df37aff *inst/tools/workaround.R
+bf15361db1206660f37b2d14e66d5d88 *inst/tools/workaround.R
 bc3a45d021c56ceca1dd904e6efa1ac3 *man/Bolus_1CPT.Rd
 7cf693ac7732c2c73ef50da595dbcade *man/Bolus_1CPTMM.Rd
 e90c97eedba663321919a5849009e5cd *man/Bolus_2CPT.Rd
@@ -257,7 +257,7 @@ d5b4239c1882345a83e33cfd85e26660 *src/ires.cpp
 92bb57a30766060b9682badfd0ea188b *src/lbfgsR.c
 505e6fd0f318f99c3400711143b1d6a1 *src/lin_cmt.h
 d95d693e795125629c2d7d702aa0931a *src/merge3.c
-88090251a342bec5d6b2eda11b74a2cd *src/neldermead.cpp
+b60897a36b9322c1172728de45936d6d *src/neldermead.cpp
 454de8eb3680c945f799d42e03325ee0 *src/npde.cpp
 3c9b4547be5ce4bb464654d85c5a781c *src/npde.h
 02a292983512190597647549c7569034 *src/ode_cmt1.cpp
@@ -265,7 +265,7 @@ d95d693e795125629c2d7d702aa0931a *src/merge3.c
 5166519ee9de7c93a517072b29b140c9 *src/res.h
 bfbdf20c4147a2286ccd338408474235 *src/resid.cpp
 2869e212e3aa48de11b86795ad661e80 *src/rprintf.c
-8963b69000fbc160f17beca6a120ecdd *src/saem.cpp
+3ee260ade079f2f2ac836d4f8138e5a5 *src/saem.cpp
 33a38688fd3cb57842c60b4e03ec1afd *src/shrink.cpp
 549b31e722141bea8774fc9f0f11e5dd *src/shrink.h
 ad64ead42315037c019f08770b112950 *src/slice.cpp
@@ -282,7 +282,7 @@ ea43a9101a3f52d35f66ffebb42f8521 *tests/testthat/Infusion_1CPTMM.csv
 6ad94dba336bff76d9d2ffb1a7161e60 *tests/testthat/fn.txt
 4df2910eaa08cb7d2cd8f998bf0c64df *tests/testthat/out.focei.prop.rds
 d794df86313681ac9b83fc25512e557f *tests/testthat/test-281.R
-ffe74eccdc348eb57b1f92cd869b10fc *tests/testthat/test-307.R
+360cc5133d5291e210c1f5d3350a1b54 *tests/testthat/test-307.R
 576e76e9a1b0e9768ffd8daff8077f2a *tests/testthat/test-autocovar.R
 0d49e85a77cc37e2cc00e60f10d7952d *tests/testthat/test-back-transform.R
 454017d06542f966f6534c3c17a79277 *tests/testthat/test-bootstrap.R
@@ -299,6 +299,9 @@ b2a96f0bd7bc2a2da51402149e1069ac *tests/testthat/test-issue-161.R
 6b1c208a44964de1848a113c421d3ae4 *tests/testthat/test-issue-172.R
 fd4b6646bfb2754569144829e88f56a3 *tests/testthat/test-issue-413.R
 ee52ec02247489a26a88914db3e406a4 *tests/testthat/test-issue-429.R
+ec2274eed075c66d8b9abcafd2c0400f *tests/testthat/test-issue-501.R
+39aa9445ed7dfe07980df0caae190d6b *tests/testthat/test-issue-502.R
+554edd06cc7e4ba486c850e680de65ed *tests/testthat/test-issue-503.R
 84948890801ba20b6004590d2e7f0d9e *tests/testthat/test-keep.R
 5179e6cf4f0be958bc97252379ad709f *tests/testthat/test-mixed-pk-ode.R
 f8a2780447269b98de88471d2ac47539 *tests/testthat/test-multiple-endpoint.R
@@ -308,8 +311,8 @@ c6a3d729bee293cbc99099b7bb4e2a67 *tests/testthat/test-piping.R
 c421a3a8a1532214dd0b2af833005c15 *tests/testthat/test-precondition.R
 f34b8efeb5cb357866192cee6379ec77 *tests/testthat/test-saem-aic.R
 dac01883dd5ae90615e4e3e5caa005cd *tests/testthat/test-saem-cov-parsing.R
-76532768e4c34730dc2802205bece73c *tests/testthat/test-saem-theo_sd.R
-02c611a482c4074bb37d732159cd023f *tests/testthat/test-saem-theo_sd.rds
+749158477b64d6d86e8faa1e360eec55 *tests/testthat/test-saem-theo_sd.R
+2b9179f656f3ff68892a192692f099a9 *tests/testthat/test-saem-theo_sd.qs
 d3b37f3cfcd301523bec1c1c33aaf8f2 *tests/testthat/test-sens-fd.R
 173221c37018b643bfda00100f33d94a *tests/testthat/test-table-cmt.R
 1e3f863b58c56da17fa789ae9676bf9b *tests/testthat/test-ui-bad-models.R

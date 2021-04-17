@@ -1,3 +1,16 @@
+# nlmixr 2.0.4
+- Now can use the following for combinde error models:
+  `foceiControl(addProp=1)` `foceiControl(addProp=2)`
+  `saemControl(addProp=1)` `saemControl(addProp=2)`
+  
+- Bug-fix for SAEM add+prop and other error models that are optimized
+  with nelder mead simplex (#503)
+  
+- Bug-fix for more complex SAEM models that were not parsing and running. (Issue
+  #502, #501)
+
+- Issue the "NaN in prediction" once per SAEM problem (#500)
+
 # nlmixr 2.0.3
 
 ## User interface changes
@@ -81,11 +94,6 @@
  - `saem` now supports censoring a similar way as `monolix` does, with
   `cens` and `limit` columns
 
- - Added the low-discrepancy "vandercorput" normal sequence from
-   SITMO/`RxODE`; In theory this will cover the domain quickly and evenly
-   possibly allowing a better solution.  This can be called with
-   `saemControl(normal="vandercorput")`.
-
  - The default of `saem` additive + proportional error has been
    switched to `combined2`, which was the `focei` default, but you can
    change this back with `saemControl(addProp="combined2")`.  The
@@ -108,6 +116,9 @@
  - `bootstrapFit` now calculates the bootstrap confidence bands and
    (optionally) will compare with the theoretical chi-squared
    distribution to help assess their adequacy.
+   
+ - `covarSearchAuto` now allows automatic forward/backward covariate
+   selection
 
 ## General Changes
 
