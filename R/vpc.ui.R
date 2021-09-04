@@ -180,18 +180,41 @@ vpc_ui <- function(fit, data = NULL, n = 100, bins = "jenks",
     ##
     ## Assume this is in the observed dataset. Add it to the current dataset
     dat <- dat[dat$evid == 0, ]
+    .ts <- FALSE
     if (any(names(sim) == "cmt") && any(names(fit) == "CMT")) {
       if (is(fit$CMT, "factor")) {
         sim$cmt <- as.integer(sim$cmt)
         attr(sim$cmt, "levels") <- levels(fit$CMT)
         class(sim$cmt) <- "factor"
       }
+      .ts <- try(as.character(sim$cmt), silent=TRUE)
+      if (inherits(.ts, "try-error")) {
+        class(sim$cmt) <- NULL
+        attr(sim$cmt, "levels") <- NULL
+        .ts <- FALSE
+      } else {
+        .ts <- TRUE
+      }
     }
+    .td <- FALSE
     if (any(names(dat) == "cmt") && any(names(fit) == "CMT")) {
       if (is(fit$CMT, "factor")) {
         dat$cmt <- as.integer(dat$cmt)
         attr(dat$cmt, "levels") <- levels(fit$CMT)
         class(dat$cmt) <- "factor"
+      }
+      .td <- try(as.character(dat$cmt), silent=TRUE)
+      if (inherits(.td, "try-error")) {
+        class(dat$cmt) <- NULL
+        attr(dat$cmt, "levels") <- NULL
+        .td <- FALSE
+        if (.ts) {
+          class(sim$cmt) <- NULL
+          attr(sim$cmt, "levels") <- NULL
+          .ts <- FALSE
+        }
+      } else {
+        .td <- TRUE
       }
     }
     sim <- list(rxsim = sim0, sim = .as.data.frame(sim), obs = dat)
@@ -200,17 +223,18 @@ vpc_ui <- function(fit, data = NULL, n = 100, bins = "jenks",
     class(sim) <- "nlmixrVpc"
   }
   ns <- loadNamespace("vpc")
-  if (exists("vpc_vpc", ns)) {
-    vpcn <- "vpc_vpc"
-  } else {
-    vpcn <- "vpc"
-  }
+  vpc_fun <-
+    if (exists("vpc_vpc", ns)) {
+      getFromNamespace("vpc_vpc", "vpc")
+    } else {
+      getFromNamespace("vpc", "vpc")
+    }
   call <- as.list(match.call(expand.dots = TRUE))[-1]
-  call <- call[names(call) %in% methods::formalArgs(getFromNamespace(vpcn, "vpc"))]
+  call <- call[names(call) %in% methods::formalArgs(vpc_fun)]
   call$obs_cols <- list(id = "id", dv = "dv", idv = "time")
   call$sim_cols <- list(id = "id", dv = "dv", idv = "time")
   call$stratify <- stratify
-  p <- do.call(getFromNamespace(vpcn, "vpc"), c(sim, call), envir = parent.frame(1))
+  p <- do.call(vpc_fun, c(sim, call), envir = parent.frame(1))
   cls <- c("nlmixrVpc", class(p))
   attr(cls, "nlmixrVpc") <- sim
   class(p) <- cls

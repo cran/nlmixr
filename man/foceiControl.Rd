@@ -48,7 +48,7 @@ foceiControl(
   covMethod = c("r,s", "r", "s", ""),
   hessEps = (.Machine$double.eps)^(1/3),
   eventFD = sqrt(.Machine$double.eps),
-  eventCentral = TRUE,
+  eventType = c("gill", "central", "forward"),
   centralDerivEps = rep(20 * sqrt(.Machine$double.eps), 2),
   lbfgsLmm = 7L,
   lbfgsPgtol = 0,
@@ -118,7 +118,8 @@ foceiControl(
   stickyRecalcN = 5,
   gradProgressOfvTime = 10,
   addProp = c("combined2", "combined1"),
-  singleOde = TRUE
+  singleOde = TRUE,
+  badSolveObjfAdj = 100
 )
 }
 \arguments{
@@ -450,8 +451,8 @@ derivatives while calculating the covariance components
 \item{eventFD}{Finite difference step for forward or central
 difference estimation of event-based gradients}
 
-\item{eventCentral}{Use the central difference approximation when
-estimating event-based gradients}
+\item{eventType}{Event gradient type for dosing events; Can be
+"gill", "central" or "forward"}
 
 \item{centralDerivEps}{Central difference tolerances.  This is a
     numeric vector of relative difference and absolute difference.
@@ -762,6 +763,10 @@ combined2: transform(y)=transform(f)+(a^2+b^2*f^(2c))*eps}
 \item{singleOde}{This option allows a single ode model to include
 the PK parameter information instead of splitting it into a
 function and a RxODE model}
+
+\item{badSolveObjfAdj}{The objective function adjustment when the
+ODE system cannot be solved.  It is based on each individual bad
+solve.}
 }
 \value{
 The control object that changes the options for the FOCEi

@@ -560,14 +560,19 @@ is.latex <- function() {
 ##' @param eventFD Finite difference step for forward or central
 ##'     difference estimation of event-based gradients
 ##'
-##' @param eventCentral Use the central difference approximation when
-##'     estimating event-based gradients
+##' @param eventType Event gradient type for dosing events; Can be
+##'   "gill", "central" or "forward"
+##'
 ##' @param gradProgressOfvTime This is the time for a single objective
 ##'     function evaluation (in seconds) to start progress bars on gradient evaluations
 ##'
 ##' @param singleOde This option allows a single ode model to include
 ##'   the PK parameter information instead of splitting it into a
 ##'   function and a RxODE model
+##'
+##' @param badSolveObjfAdj The objective function adjustment when the
+##'   ODE system cannot be solved.  It is based on each individual bad
+##'   solve.
 ##'
 ##' @inheritParams configsaem
 ##' @inheritParams RxODE::rxSolve
@@ -627,7 +632,7 @@ foceiControl <- function(sigdig = 3, ...,
                          covMethod = c("r,s", "r", "s", ""),
                          hessEps = (.Machine$double.eps)^(1 / 3),
                          eventFD = sqrt(.Machine$double.eps),
-                         eventCentral = TRUE,
+                         eventType = c("gill", "central", "forward"),
                          centralDerivEps = rep(20 * sqrt(.Machine$double.eps), 2),
                          lbfgsLmm = 7L,
                          lbfgsPgtol = 0,
@@ -706,7 +711,8 @@ foceiControl <- function(sigdig = 3, ...,
                          stickyRecalcN = 5,
                          gradProgressOfvTime = 10,
                          addProp = c("combined2", "combined1"),
-                         singleOde = TRUE) {
+                         singleOde = TRUE,
+                         badSolveObjfAdj=100) {
   if (is.null(boundTol)) {
     boundTol <- 5 * 10^(-sigdig + 1)
   }
@@ -801,6 +807,10 @@ foceiControl <- function(sigdig = 3, ...,
   if (RxODE::rxIs(scaleType, "character")) {
     .scaleTypeIdx <- c("norm" = 1L, "nlmixr" = 2L, "mult" = 3L, "multAdd" = 4L)
     scaleType <- as.integer(.scaleTypeIdx[match.arg(scaleType)])
+  }
+  if (RxODE::rxIs(eventType, "character")) {
+    .eventTypeIdx <- c("gill" = 1L, "central" = 2L, "forward" = 3L)
+    eventType <- as.integer(.eventTypeIdx[match.arg(eventType)])
   }
   if (RxODE::rxIs(normType, "character")) {
     .normTypeIdx <- c("rescale2" = 1L, "rescale" = 2L, "mean" = 3L, "std" = 4L, "len" = 5L, "constant" = 6)
@@ -1021,10 +1031,11 @@ foceiControl <- function(sigdig = 3, ...,
     repeatGillMax = as.integer(repeatGillMax),
     stickyRecalcN = as.integer(max(1, abs(stickyRecalcN))),
     eventFD = eventFD,
-    eventCentral = as.integer(eventCentral),
+    eventType = eventType,
     gradProgressOfvTime = gradProgressOfvTime,
     addProp = addProp,
     singleOde = singleOde,
+    badSolveObjfAdj=badSolveObjfAdj,
     ...
   )
   if (!missing(etaMat) && missing(maxInnerIterations)) {

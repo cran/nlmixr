@@ -129,7 +129,16 @@
   .dfObs <- object$nobs
   .nlmixrData <- nlmixr::nlmixrData(nlme::getData(object))
   .dfSub <- length(unique(.nlmixrData$ID))
-  .thetaMat <- nlme::getVarCov(object)
+  .env <- object$env
+  if (exists("cov", .env)) {
+    .thetaMat <- nlme::getVarCov(object)
+  } else {
+    ## warning("simulation assumes thetaMat has very little varaibility in it since there is no covariance")
+    ## .theta0 <- object$uif$ini$name[which(is.na(object$uif$ini$err) & !is.na(object$uif$ini$ntheta))]
+    ## .thetaMat <- diag(length(.theta0)) * 1e-10
+    ## dimnames(.thetaMat) <- list(.theta0, .theta0)
+    .thetaMat <- NULL
+  }
   if (all(is.na(object$uif$ini$neta1))) {
     .omega <- NULL
     .dfSub <- 0
@@ -269,6 +278,7 @@ nlmixrSim <- function(object, ...) {
     attr(.cls, ".RxODE.env") <- .rxEnv
     if (any(names(.ret) == "CMT") && any(names(object) == "CMT")) {
       if (is(object$CMT, "factor")) {
+        .ret$CMT <- as.integer(.ret$CMT)
         levels(.ret$CMT) <- levels(object$CMT)
         class(.ret$CMT) <- "factor"
       }

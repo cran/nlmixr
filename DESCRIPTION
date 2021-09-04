@@ -9,10 +9,10 @@ Suggests: Deriv, Rvmmin, broom.mixed, crayon, knitr, data.table,
         devtools, digest, dotwhisker, dplyr, expm, flextable, ggtext,
         patchwork, gridExtra, huxtable, lattice, lbfgs, lotri, madness,
         matrixcalc, nloptr, officer, pkgdown, reshape2, rmarkdown,
-        testthat, tidyr, ucminf, vpc (>= 1.0.0), xgxr, yaml, xpose,
+        testthat, tidyr, ucminf, vpc (>= 1.1.0), xgxr, yaml, xpose,
         generics, tibble, checkmate, cli, qs, covr, forecast,
         latticeExtra
-Version: 2.0.4
+Version: 2.0.5
 Authors@R: c(person("Matthew","Fidler",
       role = "aut", email = "matthew.fidler@gmail.com",
       comment=c(ORCID="0000-0001-8538-6691")),
@@ -30,6 +30,8 @@ Authors@R: c(person("Matthew","Fidler",
    person("Mason","McComb",
       role = "aut", email = "mason.c.mccomb@gmail.com",
       comment=c(ORCID="0000-0001-9871-8616")),
+   person("Vipul","Mann",
+      role = "aut", email = "vm2583@columbia.edu"),
    person("Mirjam","Trame", role = "ctb"),
    person("Teun","Post",
       role = "ctb", email = "t.post@lapp.nl"),   
@@ -45,7 +47,6 @@ Authors@R: c(person("Matthew","Fidler",
    person("Audrey", "Lavenu", role="ctb"),
    person("Marc", "Lavielle", role="ctb"),
    person("David","Ardia",role = "cph"),
-   person("Daniel C.", "Dillon", role="ctb"),
    person("Katharine","Mullen",role = "cph"),
    person("Ben", "Goodrich", role = "ctb")
    )
@@ -64,7 +65,7 @@ URL: https://github.com/nlmixrdevelopment/nlmixr
 LazyData: true
 RoxygenNote: 7.1.1
 Biarch: true
-Packaged: 2021-04-17 12:20:42 UTC; annie
+Packaged: 2021-09-03 23:15:13 UTC; annie
 Maintainer: Wenping Wang <wwang8198@gmail.com>
 Encoding: UTF-8
 Author: Matthew Fidler [aut] (<https://orcid.org/0000-0001-8538-6691>),
@@ -74,6 +75,7 @@ Author: Matthew Fidler [aut] (<https://orcid.org/0000-0001-8538-6691>),
   Wenping Wang [aut, cre],
   Robert Leary [ctb],
   Mason McComb [aut] (<https://orcid.org/0000-0001-9871-8616>),
+  Vipul Mann [aut],
   Mirjam Trame [ctb],
   Teun Post [ctb],
   Richard Hooijmaijers [aut],
@@ -86,8 +88,7 @@ Author: Matthew Fidler [aut] (<https://orcid.org/0000-0001-8538-6691>),
   Audrey Lavenu [ctb],
   Marc Lavielle [ctb],
   David Ardia [cph],
-  Daniel C. Dillon [ctb],
   Katharine Mullen [cph],
   Ben Goodrich [ctb]
 Repository: CRAN
-Date/Publication: 2021-04-17 12:50:03 UTC
+Date/Publication: 2021-09-04 12:10:02 UTC

@@ -1,11 +1,74 @@
+# nlmixr 2.0.5
+
+- Fix for `nlmixrSim` CMT to have a factor that matches the `RxODE`
+  definition (issue #501)
+  
+- Give instructions on how to reinstall nlmixr if it is linked to a
+  different version of `RxODE`. (#555)
+  
+- Now inform which parameters are near the boundary (#544)
+
+- The `saem` estimation routine will now increase the tolerance when
+  ODE solving is difficult; This can be controlled with
+  `odeRecalcFactors` and `maxOdeRecalc`.  This is similar to the
+  handling that `focei` already uses.
+  
+- For `focei` family estimation methods:
+
+  - If the inner problem couldn't solve the ODE using the forward
+    sensitivities, try using numerical differences to approximate the
+    derivatives needed for the focei problem.  A warning will be
+    issued when this occurs. This requires RxODE 1.1.0 that always
+    generates the finite difference prediction model. If RxODE is an
+    earlier version, only apply this when the finite differences are
+    supplied to nlmixr.  This occurs when there are ETAs on the dose
+    based events like duration, lag time, bioavaibility etc.
+
+  - If eta nudge is non-zero, when resetting an ETA estimate, try the
+    zero estimate first, and then the nudged locations.
+
+  - When there is an ODE system for an individual that cannot be
+    optimized in the inner problem, adjust that individual's objective
+    function by 100 points.  This can be controlled by
+    `foceiControl(badSolveObjfAdj=100)`
+
+  - Theta reset now will now make sure the parameter is estimated and
+    between the proper bounds before resetting.
+
+ - `$simInfo` non longer tries to generate the covariance step, and
+   will simply have a `$simInfo$thetaMat` entry of `NULL` if the
+   covariance step was unsuccessful.
+
+ - With `vpc()` if the cmt conversion isn't working correctly, fall
+   back to compartment numbers.
+
+ - Take out symbol stripping based on CRAN policies
+
+ - Fall back gracefully when `rbind` doesn't work in parameter
+   histories.
+
+ - Correctly print out the number of compartments based on the new
+   `RxODE` `linCmt()` that was updated to support solved systems in
+   focei. (Reported by Bill Denney #537).
+
+ - Use strict headers since Rcpp now is moving toward strict headers.
+   Also changed all the `Calloc` to `R_Calloc`, `Free` to `R_Free`,
+   and `DOUBLE_EPS` to `DBL_EPSILON`.
+
+- `gnlmm` no longer imports the data.frame to an RxODE event table.
+  This should speed up the routine slightly and (more importantly)
+  make it easier to specify time varying covariates. 
+
+
 # nlmixr 2.0.4
+
 - Now can use the following for combinde error models:
   `foceiControl(addProp=1)` `foceiControl(addProp=2)`
   `saemControl(addProp=1)` `saemControl(addProp=2)`
-  
+
 - Bug-fix for SAEM add+prop and other error models that are optimized
   with nelder mead simplex (#503)
-  
+
 - Bug-fix for more complex SAEM models that were not parsing and running. (Issue
   #502, #501)
 
@@ -116,7 +179,7 @@
  - `bootstrapFit` now calculates the bootstrap confidence bands and
    (optionally) will compare with the theoretical chi-squared
    distribution to help assess their adequacy.
-   
+
  - `covarSearchAuto` now allows automatic forward/backward covariate
    selection
 
