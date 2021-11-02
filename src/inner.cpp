@@ -43,7 +43,7 @@
 #define expit(alpha, low, high) _powerDi(alpha, 1.0, 4, low, high)
 #define probitInv(alpha, low, high) _powerDi(alpha, 1.0, 6, low, high)
 
-extern "C"{
+extern "C" {
   typedef void (*S2_fp) (int *, int *, double *, double *, double *, int *, float *,
 			 double *, int *);
   typedef void (*n1qn1_fp)(S2_fp simul, int n[], double x[], double f[], double g[],
@@ -887,7 +887,7 @@ double likInner0(double *eta, int id){
       double f, err, r, fpm, fpm2, rp = 0,lnr, limit, dv,dv0, curT;
       int cens = 0;
       int oldNeq = op->neq;
-      iniSubjectI(op->neq, 1, ind, op, rx, rxInner.update_inis);
+      iniSubjectI(id, 1, ind, op, rx, rxInner.update_inis);
       for (j = 0; j < ind->n_all_times; ++j){
 	ind->idx=j;
 	kk = ind->ix[j];

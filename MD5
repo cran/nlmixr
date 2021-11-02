@@ -1,6 +1,6 @@
-af7f068d32a254dbd16ecc2ac37a6f40 *DESCRIPTION
+b8acf791043ae1bdb6fd3ac1499d9e63 *DESCRIPTION
 b42fb483391bc26571b1d699e4cbd2ea *NAMESPACE
-ad95429230dec6d4cf3fd190d9eaebc7 *NEWS.md
+f79312df8fede85fbe48dc3080ca8243 *NEWS.md
 e10dad0413fc5d400ae260ffcc225081 *R/000.R
 859e7d637468602b6393e8739ab0fe0a *R/RcppExports.R
 7a08e571b0130f626661530e3d43a823 *R/RcppManualExports.R
@@ -249,7 +249,7 @@ c766f1940d7038c53da0b13c19086f0f *src/censResid.h
 ec15c6750c6420a59b990cd6d2e3611c *src/cwres.h
 6076dbdac367f18993aaac0402eb8595 *src/evaluate.h
 c14e43b3d151b3824eb1d170d36778b8 *src/init.c
-01710655158f2509ec6a6cc9ea4a9363 *src/inner.cpp
+2fb3668e45208af4ae83b7fbbceecbc7 *src/inner.cpp
 82ce7d4bb062f4e9c6f597b860016688 *src/ires.cpp
 483795e9d3322c9662787979763fc576 *src/ires.h
 5ab66ed62f115d047f5452c053f18fe4 *src/lbfgsR.c
